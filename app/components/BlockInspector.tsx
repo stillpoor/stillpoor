@@ -283,78 +283,58 @@ export default function BlockInspector({
     );
   }
 
-  return (
-    <aside className="pointer-events-auto absolute bottom-8 left-1/2 w-80 -translate-x-1/2 rounded-xl bg-white p-4 shadow-lg">
-      <p className="text-sm font-semibold">
-        Block #{publicBlockNumber}
-      </p>
-
-      <p className="mt-1 text-sm text-gray-500">
-        Available
-      </p>
-
-      {claimState.isActive && (
-        <>
-          <div className="mt-4 border-t border-gray-200 pt-4">
-            <dl className="space-y-3 text-sm">
-              <div className="flex items-center justify-between gap-4">
-                <dt className="text-gray-500">
-                  Selected
-                </dt>
-
-                <dd className="font-medium">
-                  {selectedBlockCount}{" "}
-                  {selectedBlockCount === 1
-                    ? "Block"
-                    : "Blocks"}
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              onClick={
-                handleCancelClaimMode
-              }
-              className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium"
-            >
-              Cancel
-            </button>
-
-            <button
-  type="button"
-  onClick={handleClaim}
-  disabled={
-  selectedBlockCount === 0 ||
-  walletState.isConnecting ||
-  isReserving
+  if (!claimState.isActive) {
+  return null;
 }
-  className="flex-1 rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
->
-  {isReserving
-  ? "Reserving..."
-  : walletState.isConnecting
-    ? "Connecting..."
-: walletState.paymentAddress
-  ? "Claim"
-  : "Connect to Claim"}
-  
-</button>
-          </div>
-          
-          {reservationError && (
-  <p
-    role="alert"
-    className="mt-3 text-sm text-red-600"
-  >
-    {reservationError}
-  </p>
-)}
 
-        </>
-      )}
-    </aside>
-  );
+return (
+  <aside className="pointer-events-auto absolute bottom-8 left-1/2 w-80 -translate-x-1/2 rounded-xl bg-white p-4 shadow-lg">
+    <p className="text-center text-sm font-semibold">
+      {selectedBlockCount}{" "}
+      {selectedBlockCount === 1
+        ? "Block selected"
+        : "Blocks selected"}
+    </p>
+
+    <div className="mt-4 flex gap-2">
+      <button
+        type="button"
+        onClick={
+          handleCancelClaimMode
+        }
+        className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium"
+      >
+        Cancel
+      </button>
+
+      <button
+        type="button"
+        onClick={handleClaim}
+        disabled={
+          selectedBlockCount === 0 ||
+          walletState.isConnecting ||
+          isReserving
+        }
+        className="flex-1 rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {isReserving
+          ? "Reserving..."
+          : walletState.isConnecting
+            ? "Connecting..."
+            : walletState.paymentAddress
+              ? "Claim"
+              : "Connect to Claim"}
+      </button>
+    </div>
+
+    {reservationError && (
+      <p
+        role="alert"
+        className="mt-3 text-sm text-red-600"
+      >
+        {reservationError}
+      </p>
+    )}
+  </aside>
+);
 }

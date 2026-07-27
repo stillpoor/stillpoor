@@ -8,20 +8,47 @@ import {
 import {
   loadClaimedBlocks,
 } from "../lib/board/boardDatabase";
-import { renderBoard } from "../lib/board/boardRender";
-import { boardState } from "../lib/board/boardState";
+
+import {
+  renderBoard,
+} from "../lib/board/boardRender";
+
+import {
+  boardState,
+} from "../lib/board/boardState";
+
 import {
   replaceBlocks,
 } from "../lib/board/boardStore";
 
-import { CameraController } from "../lib/camera/cameraController";
-import { cameraConfig } from "../lib/camera/cameraConfig";
-import { cameraState } from "../lib/camera/cameraState";
+import {
+  CameraController,
+} from "../lib/camera/cameraController";
+
+import {
+  cameraConfig,
+} from "../lib/camera/cameraConfig";
+
+import {
+  cameraState,
+} from "../lib/camera/cameraState";
+
+import {
+  subscribeToClaim,
+} from "../lib/claim/claimState";
 
 import {
   getEditorState,
   subscribeToEditor,
 } from "../lib/editor/editorState";
+
+import type {
+  BlockCoordinate,
+} from "../lib/board/boardTypes";
+
+interface FocusClaimBlockEventDetail {
+  block: BlockCoordinate;
+}
 
 export default function BoardCanvas() {
   const canvasRef =
@@ -111,6 +138,26 @@ export default function BoardCanvas() {
         canvas,
         render,
       );
+
+    const handleFocusClaimBlock = (
+      event: Event,
+    ) => {
+      const customEvent =
+        event as CustomEvent<FocusClaimBlockEventDetail>;
+
+      const block =
+        customEvent.detail?.block;
+
+      if (!block) {
+        return;
+      }
+
+      cameraController.focusBlock(
+        block,
+        cameraConfig.claimFocusZoom,
+        true,
+      );
+    };
 
     const getResponsiveEditorZoom = () => {
       const topControlsSpace = 220;
@@ -296,6 +343,14 @@ export default function BoardCanvas() {
         handleEditorStateChange,
       );
 
+    const unsubscribeFromClaim =
+      subscribeToClaim(render);
+
+    window.addEventListener(
+      "board:focus-claim-block",
+      handleFocusClaimBlock,
+    );
+
     resizeObserver.observe(canvas);
 
     resizeCanvas();
@@ -306,6 +361,13 @@ export default function BoardCanvas() {
       hasBeenDisposed = true;
 
       unsubscribeFromEditor();
+      unsubscribeFromClaim();
+
+      window.removeEventListener(
+        "board:focus-claim-block",
+        handleFocusClaimBlock,
+      );
+
       resizeObserver.disconnect();
       cameraController.destroy();
     };

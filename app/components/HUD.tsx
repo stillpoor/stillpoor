@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import BlockEditor from "./BlockEditor";
 import BlockInspector from "./BlockInspector";
 import BoardStatsHUD from "./BoardStatsHUD";
@@ -24,7 +26,18 @@ export default function HUD() {
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
       <div className="pointer-events-auto absolute top-8 left-8">
-        <BoardStatsHUD />
+        <div className="flex flex-col items-start gap-5">
+          <Image
+            src="/stillpoor-logo.svg"
+            alt="StillPoor"
+            width={396}
+            height={123}
+            priority
+            className="h-[32px] w-auto"
+          />
+
+          <BoardStatsHUD />
+        </div>
       </div>
 
       <div className="pointer-events-auto absolute top-8 right-8">

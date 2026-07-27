@@ -2,8 +2,14 @@ import {
   getAppMode,
   setAppMode,
 } from "../app/appState";
-import type { BlockCoordinate } from "../board/boardTypes";
-import type { ClaimState } from "./claimTypes";
+
+import type {
+  BlockCoordinate,
+} from "../board/boardTypes";
+
+import type {
+  ClaimState,
+} from "./claimTypes";
 
 type ClaimListener = () => void;
 
@@ -12,7 +18,8 @@ let claimState: ClaimState = {
   blocks: [],
 };
 
-const listeners = new Set<ClaimListener>();
+const listeners =
+  new Set<ClaimListener>();
 
 function notifyListeners() {
   listeners.forEach((listener) => {
@@ -25,13 +32,30 @@ function areSameBlock(
   secondBlock: BlockCoordinate,
 ) {
   return (
-    firstBlock.row === secondBlock.row &&
-    firstBlock.column === secondBlock.column
+    firstBlock.row ===
+      secondBlock.row &&
+    firstBlock.column ===
+      secondBlock.column
   );
 }
 
 export function getClaimState() {
   return claimState;
+}
+
+export function startClaimMode() {
+  if (getAppMode() === "editor") {
+    return;
+  }
+
+  setAppMode("claim");
+
+  claimState = {
+    isActive: true,
+    blocks: [],
+  };
+
+  notifyListeners();
 }
 
 export function enterClaimMode(
@@ -54,25 +78,36 @@ export function toggleClaimBlock(
     return;
   }
 
-  const isAlreadySelected = claimState.blocks.some(
-    (selectedBlock) =>
-      areSameBlock(selectedBlock, block),
-  );
+  const isAlreadySelected =
+    claimState.blocks.some(
+      (selectedBlock) =>
+        areSameBlock(
+          selectedBlock,
+          block,
+        ),
+    );
 
   if (!isAlreadySelected) {
     claimState = {
       ...claimState,
-      blocks: [...claimState.blocks, block],
+      blocks: [
+        ...claimState.blocks,
+        block,
+      ],
     };
 
     notifyListeners();
     return;
   }
 
-  const remainingBlocks = claimState.blocks.filter(
-    (selectedBlock) =>
-      !areSameBlock(selectedBlock, block),
-  );
+  const remainingBlocks =
+    claimState.blocks.filter(
+      (selectedBlock) =>
+        !areSameBlock(
+          selectedBlock,
+          block,
+        ),
+    );
 
   if (remainingBlocks.length === 0) {
     cancelClaim();
@@ -92,7 +127,10 @@ export function isBlockClaimed(
 ) {
   return claimState.blocks.some(
     (selectedBlock) =>
-      areSameBlock(selectedBlock, block),
+      areSameBlock(
+        selectedBlock,
+        block,
+      ),
   );
 }
 

@@ -5,6 +5,22 @@ import {
   useState,
 } from "react";
 
+import {
+  boardConfig,
+} from "../lib/board/boardConfig";
+
+import {
+  enterClaimMode,
+} from "../lib/claim/claimState";
+
+import {
+  useClaimState,
+} from "../lib/claim/useClaimState";
+
+import {
+  setSelectedBlock,
+} from "../lib/selection/selectionState";
+
 interface BoardStats {
   currentWealthSats: number;
 
@@ -12,8 +28,9 @@ interface BoardStats {
   claimedBlocks: number;
   activeReservedBlocks: number;
 
-  currentPriceSats: number | null;
-  nextPriceSats: number | null;
+  currentPriceSats:
+    | number
+    | null;
 
   blocksUntilPriceIncrease:
     | number
@@ -54,6 +71,9 @@ function formatBtcFromSats(
 }
 
 export default function BoardStatsHUD() {
+  const claimState =
+    useClaimState();
+
   const [
     stats,
     setStats,
@@ -147,6 +167,60 @@ export default function BoardStatsHUD() {
     };
   }, []);
 
+  const handleClaimFirstAvailableBlock =
+    () => {
+      const blockNumber =
+        stats?.nextAvailableBlockNumber;
+
+      if (
+        !blockNumber ||
+        blockNumber < 1
+      ) {
+        return;
+      }
+
+      const blocksPerRow =
+        boardConfig.width /
+        boardConfig.blockSize;
+
+      const zeroBasedBlockNumber =
+        blockNumber - 1;
+
+      const block = {
+        row: Math.floor(
+          zeroBasedBlockNumber /
+            blocksPerRow,
+        ),
+
+        column:
+          zeroBasedBlockNumber %
+          blocksPerRow,
+      };
+
+enterClaimMode(block);
+setSelectedBlock(block);
+
+window.dispatchEvent(
+  new CustomEvent(
+    "board:focus-claim-block",
+    {
+      detail: {
+        block,
+      },
+    },
+  ),
+);
+    };
+
+  const canStartClaim =
+    Boolean(
+      stats &&
+        !stats.soldOut &&
+        stats.availableBlocks > 0 &&
+        stats.nextAvailableBlockNumber !==
+          null,
+    );
+
   return (
     <div className="flex w-[270px] max-w-[calc(100vw-2rem)] flex-col gap-3">
       <section className="rounded-2xl border border-black/10 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-md">
@@ -205,36 +279,19 @@ export default function BoardStatsHUD() {
               </dd>
             </div>
 
-            {stats?.nextPriceSats !==
+            {stats?.blocksUntilPriceIncrease !==
             null ? (
-              <>
-                <div className="flex items-center justify-between gap-4">
-                  <dt className="text-black/50">
-                    Next price
-                  </dt>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-black/50">
+                  Price increases in
+                </dt>
 
-                  <dd className="font-semibold text-black">
-                    ₿{" "}
-                    {stats
-                      ? formatBtcFromSats(
-                          stats.nextPriceSats,
-                        )
-                      : "—"}
-                  </dd>
-                </div>
-
-                <div className="flex items-center justify-between gap-4">
-                  <dt className="text-black/50">
-                    Price increases in
-                  </dt>
-
-                  <dd className="font-semibold text-black">
-                    {stats?.blocksUntilPriceIncrease ??
-                      "—"}{" "}
-                    Blocks
-                  </dd>
-                </div>
-              </>
+                <dd className="font-semibold text-black">
+                  {stats?.blocksUntilPriceIncrease ??
+                    "—"}{" "}
+                  Blocks
+                </dd>
+              </div>
             ) : (
               <div className="flex items-center justify-between gap-4">
                 <dt className="text-black/50">
@@ -242,11 +299,24 @@ export default function BoardStatsHUD() {
                 </dt>
 
                 <dd className="font-semibold text-black">
-                  Maximum tier
+                  Maximum price reached
                 </dd>
               </div>
             )}
           </dl>
+        )}
+
+        {!claimState.isActive && (
+          <button
+            type="button"
+            onClick={
+              handleClaimFirstAvailableBlock
+            }
+            disabled={!canStartClaim}
+            className="mt-4 w-full rounded-lg bg-gray-950 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Claim Blocks
+          </button>
         )}
 
         {hasError && (

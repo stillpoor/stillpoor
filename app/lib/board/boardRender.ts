@@ -3,7 +3,10 @@ import {
   getBlocks,
 } from "./boardStore";
 
-import { getClaimState } from "../claim/claimState";
+import {
+  getClaimState,
+  isBlockClaimed,
+} from "../claim/claimState";
 import { getEditorState } from "../editor/editorState";
 import { getHoveredPixel } from "../editor/editorHoverState";
 import { hoverState } from "../hover/hoverState";
@@ -307,19 +310,65 @@ function renderClaimSelection(
     return;
   }
 
-  context.save();
+  const columnCount =
+    boardState.width /
+    boardState.blockSize;
 
-  context.fillStyle = "#93c5fd";
+  context.save();
 
   claimState.blocks.forEach(
     (block) => {
-      context.fillRect(
+      const blockX =
         block.column *
-          boardState.blockSize,
+        boardState.blockSize;
+
+      const blockY =
         block.row *
-          boardState.blockSize,
+        boardState.blockSize;
+
+      const publicBlockNumber =
+        block.row * columnCount +
+        block.column +
+        1;
+
+      const label =
+        String(publicBlockNumber);
+
+      const fontSize =
+        label.length >= 4
+          ? 5
+          : label.length === 3
+            ? 6
+            : 7;
+
+      context.fillStyle =
+        "#a7f3d0";
+
+      context.fillRect(
+        blockX,
+        blockY,
         boardState.blockSize,
         boardState.blockSize,
+      );
+
+      context.fillStyle =
+        "#047857";
+
+      context.font =
+        `700 ${fontSize}px sans-serif`;
+
+      context.textAlign =
+        "center";
+
+      context.textBaseline =
+        "middle";
+
+      context.fillText(
+        label,
+        blockX +
+          boardState.blockSize / 2,
+        blockY +
+          boardState.blockSize / 2,
       );
     },
   );
@@ -337,6 +386,15 @@ function renderHover(
   if (
     editorState.isActive ||
     !hoverState.block
+  ) {
+    return;
+  }
+
+  if (
+    getClaimState().isActive &&
+    isBlockClaimed(
+      hoverState.block,
+    )
   ) {
     return;
   }
