@@ -32,10 +32,11 @@ interface ConfirmResponse {
 
 interface ReserveClaimOrderOptions {
   /*
-   * Conservées temporairement pour maintenir
-   * la compatibilité avec BlockInspector.
+   * Temporarily kept for compatibility
+   * with BlockInspector.
    *
-   * Elles ne sont plus envoyées au serveur.
+   * These addresses are no longer sent
+   * to the server.
    */
   paymentAddress: string;
   ordinalsAddress: string;
@@ -48,12 +49,23 @@ interface OrderActionOptions {
   orderId: string;
 
   /*
-   * Conservée temporairement pour maintenir
-   * la compatibilité avec PaymentModal.
+   * Temporarily kept for compatibility
+   * with PaymentModal.
    *
-   * Elle ne quitte plus le navigateur.
+   * This address no longer leaves
+   * the browser.
    */
   paymentAddress: string;
+}
+
+function refreshBoardStats() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(
+    new Event("board-stats:refresh"),
+  );
 }
 
 async function readResponse(
@@ -118,6 +130,8 @@ export async function reserveClaimOrder(
   const reservation =
     data as unknown as ReserveResponse;
 
+  refreshBoardStats();
+
   return {
     orderId:
       reservation.orderId,
@@ -167,6 +181,10 @@ export async function cancelClaimOrder(
   const result =
     data as unknown as CancelResponse;
 
+  if (result.ok) {
+    refreshBoardStats();
+  }
+
   return result.ok;
 }
 
@@ -209,6 +227,8 @@ export async function confirmSimulatedClaimOrder(
 
   const result =
     data as unknown as ConfirmResponse;
+
+  refreshBoardStats();
 
   return result.claimedBlocks;
 }

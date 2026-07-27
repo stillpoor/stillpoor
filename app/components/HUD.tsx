@@ -2,11 +2,17 @@
 
 import BlockEditor from "./BlockEditor";
 import BlockInspector from "./BlockInspector";
+import BoardStatsHUD from "./BoardStatsHUD";
 import PaymentModal from "./PaymentModal";
 import WalletButton from "./WalletButton";
 
-import { useEditorState } from "../lib/editor/useEditorState";
-import { useSelectedBlock } from "../lib/selection/useSelectedBlock";
+import {
+  useEditorState,
+} from "../lib/editor/useEditorState";
+
+import {
+  useSelectedBlock,
+} from "../lib/selection/useSelectedBlock";
 
 export default function HUD() {
   const editorState =
@@ -18,19 +24,11 @@ export default function HUD() {
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
       <div className="pointer-events-auto absolute top-8 left-8">
-        HUD Top Left
+        <BoardStatsHUD />
       </div>
 
       <div className="pointer-events-auto absolute top-8 right-8">
         <WalletButton />
-      </div>
-
-      <div className="pointer-events-auto absolute bottom-8 left-8">
-        HUD Bottom Left
-      </div>
-
-      <div className="pointer-events-auto absolute right-8 bottom-8">
-        HUD Bottom Right
       </div>
 
       {editorState.isActive ? (
