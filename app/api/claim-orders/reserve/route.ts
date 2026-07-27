@@ -13,10 +13,6 @@ import type {
 } from "../../../lib/board/boardTypes";
 
 import {
-  claimConfig,
-} from "../../../lib/claim/claimConfig";
-
-import {
   paymentConfig,
 } from "../../../lib/payment/paymentConfig";
 
@@ -26,6 +22,12 @@ import {
 
 interface ReserveRequestBody {
   blocks?: unknown;
+}
+
+interface ReservationRow {
+  order_id?: unknown;
+  expires_at?: unknown;
+  amount_sats?: unknown;
 }
 
 function isBlockCoordinate(
@@ -73,6 +75,25 @@ function getPublicBlockNumber(
     block.row * blocksPerRow +
     block.column +
     1
+  );
+}
+
+function isNonEmptyString(
+  value: unknown,
+): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0
+  );
+}
+
+function isPositiveSafeInteger(
+  value: unknown,
+): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value > 0
   );
 }
 
@@ -188,10 +209,6 @@ export async function POST(
     );
   }
 
-  const amountSats =
-    blockNumbers.length *
-    claimConfig.blockPriceSats;
-
   const {
     data,
     error,
@@ -207,9 +224,6 @@ export async function POST(
       p_block_numbers:
         blockNumbers,
 
-      p_amount_sats:
-        amountSats,
-
       p_receiver_address:
         paymentConfig.receiverAddress,
     },
@@ -220,12 +234,16 @@ export async function POST(
       error.message ||
       "Unable to reserve the Blocks.";
 
+    const lowerError =
+      errorMessage.toLowerCase();
+
     const isAvailabilityConflict =
-      errorMessage
-        .toLowerCase()
-        .includes(
-          "no longer available",
-        );
+      lowerError.includes(
+        "no longer available",
+      ) ||
+      lowerError.includes(
+        "no more blocks",
+      );
 
     return NextResponse.json(
       {
@@ -243,12 +261,24 @@ export async function POST(
 
   const reservation =
     Array.isArray(data)
-      ? data[0]
-      : null;
+      ? (
+          data[0] as
+            | ReservationRow
+            | undefined
+        )
+      : undefined;
 
   if (
-    !reservation?.order_id ||
-    !reservation?.expires_at
+    !reservation ||
+    !isNonEmptyString(
+      reservation.order_id,
+    ) ||
+    !isNonEmptyString(
+      reservation.expires_at,
+    ) ||
+    !isPositiveSafeInteger(
+      reservation.amount_sats,
+    )
   ) {
     return NextResponse.json(
       {
@@ -272,7 +302,8 @@ export async function POST(
       expiresAt:
         reservation.expires_at,
 
-      amountSats,
+      amountSats:
+        reservation.amount_sats,
     },
     {
       headers: {

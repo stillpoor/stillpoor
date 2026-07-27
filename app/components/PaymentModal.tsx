@@ -25,9 +25,21 @@ import {
 function formatBtcFromSats(
   sats: number,
 ) {
-  return `${(
-    sats / 100_000_000
-  ).toFixed(3)} BTC`;
+  const wholeBtc =
+    Math.floor(
+      sats / 100_000_000,
+    );
+
+  const fractionalBtc =
+    String(
+      sats % 100_000_000,
+    )
+      .padStart(8, "0")
+      .replace(/0+$/, "");
+
+  return fractionalBtc
+    ? `${wholeBtc}.${fractionalBtc} BTC`
+    : `${wholeBtc} BTC`;
 }
 
 function formatExpiryTime(

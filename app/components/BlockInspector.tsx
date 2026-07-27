@@ -3,7 +3,6 @@
 import { boardConfig } from "../lib/board/boardConfig";
 import { getBlock } from "../lib/board/boardStore";
 
-import { claimConfig } from "../lib/claim/claimConfig";
 import { cancelClaim } from "../lib/claim/claimState";
 import { useClaimState } from "../lib/claim/useClaimState";
 
@@ -72,14 +71,6 @@ function formatDate(date: string) {
   ).format(new Date(date));
 }
 
-function formatBtcFromSats(
-  sats: number,
-) {
-  return `${(
-    sats / 100_000_000
-  ).toFixed(3)} BTC`;
-}
-
 export default function BlockInspector({
   block,
 }: BlockInspectorProps) {
@@ -110,10 +101,6 @@ export default function BlockInspector({
 
   const selectedBlockCount =
     claimState.blocks.length;
-
-  const totalPriceSats =
-    selectedBlockCount *
-    claimConfig.blockPriceSats;
 
   const isOwnedByCurrentUser =
   Boolean(
@@ -322,18 +309,6 @@ export default function BlockInspector({
                     : "Blocks"}
                 </dd>
               </div>
-
-              <div className="flex items-center justify-between gap-4">
-                <dt className="text-gray-500">
-                  Total
-                </dt>
-
-                <dd className="font-medium">
-                  {formatBtcFromSats(
-                    totalPriceSats,
-                  )}
-                </dd>
-              </div>
             </dl>
           </div>
 
@@ -362,16 +337,10 @@ export default function BlockInspector({
   ? "Reserving..."
   : walletState.isConnecting
     ? "Connecting..."
-    : walletState.paymentAddress
-      ? (
-        <>
-          Claim ·{" "}
-          {formatBtcFromSats(
-            totalPriceSats,
-          )}
-        </>
-      )
-      : "Connect to Claim"}
+: walletState.paymentAddress
+  ? "Claim"
+  : "Connect to Claim"}
+  
 </button>
           </div>
           
