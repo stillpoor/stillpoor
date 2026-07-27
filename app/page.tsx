@@ -21,7 +21,7 @@ export default function HomePage() {
           />
 
           <p className="text-xl font-medium tracking-[-0.025em] text-[#030712]/55 sm:text-2xl">
-            COMING SOON...
+            Coming soon
           </p>
         </div>
       </main>
