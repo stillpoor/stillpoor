@@ -10,7 +10,7 @@ export default function HomePage() {
   if (isComingSoon) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-[#e9e9e9] px-6">
-        <div className="flex flex-col items-center text-center">
+        <div className="flex flex-col items-center gap-6 text-center">
           <Image
             src="/stillpoor-logo.svg"
             alt="StillPoor"
@@ -20,8 +20,8 @@ export default function HomePage() {
             className="h-auto w-[264px] sm:w-[330px]"
           />
 
-          <p className="mt-7 text-xl font-medium tracking-[-0.025em] text-[#030712]/55 sm:text-2xl">
-            Coming soon
+          <p className="text-xl font-medium tracking-[-0.025em] text-[#030712]/55 sm:text-2xl">
+            COMING SOON...
           </p>
         </div>
       </main>
