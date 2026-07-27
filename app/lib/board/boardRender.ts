@@ -1,6 +1,6 @@
 import {
-  getBlock,
   getBlockKey,
+  getBlocks,
 } from "./boardStore";
 
 import { getClaimState } from "../claim/claimState";
@@ -72,10 +72,8 @@ function getPixelTexture(
   const needsNewTexture =
     !pixelTextureCanvas ||
     !pixelTextureContext ||
-    pixelTextureWidth !==
-      requiredWidth ||
-    pixelTextureHeight !==
-      requiredHeight;
+    pixelTextureWidth !== requiredWidth ||
+    pixelTextureHeight !== requiredHeight;
 
   if (needsNewTexture) {
     const canvas =
@@ -104,18 +102,16 @@ function getPixelTexture(
   }
 
   const canvas = pixelTextureCanvas;
-const context = pixelTextureContext;
+  const context = pixelTextureContext;
 
-if (!canvas || !context) {
-  return null;
-}
+  if (!canvas || !context) {
+    return null;
+  }
 
-return {
-  canvas,
-  context,
-  rowCount,
-  columnCount,
-};
+  return {
+    canvas,
+    context,
+  };
 }
 
 function updatePixelTexture(
@@ -134,119 +130,105 @@ function updatePixelTexture(
   const activeBlockKeys =
     new Set<string>();
 
-  for (
-    let row = 0;
-    row < texture.rowCount;
-    row++
-  ) {
-    for (
-      let column = 0;
-      column <
-      texture.columnCount;
-      column++
+  /*
+   * On parcourt uniquement les Blocks occupés,
+   * et non les 4 096 emplacements du Board.
+   */
+  for (const block of getBlocks()) {
+    const { row, column } =
+      block.coordinate;
+
+    const blockKey =
+      getBlockKey(
+        block.coordinate,
+      );
+
+    activeBlockKeys.add(blockKey);
+
+    const editorDraft =
+      editorState.isActive
+        ? editorState.drafts.get(
+            blockKey,
+          )
+        : undefined;
+
+    const pixels =
+      editorDraft?.pixels ??
+      block.pixels;
+
+    const existingEntry =
+      pixelTextureEntries.get(
+        blockKey,
+      );
+
+    /*
+     * Si le tableau de Pixels n’a pas changé,
+     * la partie correspondante de la texture
+     * est déjà à jour.
+     */
+    if (
+      existingEntry?.pixels === pixels
     ) {
-      const block = getBlock({
+      continue;
+    }
+
+    const textureX =
+      column *
+      PIXELS_PER_BLOCK;
+
+    const textureY =
+      row *
+      PIXELS_PER_BLOCK;
+
+    texture.context.clearRect(
+      textureX,
+      textureY,
+      PIXELS_PER_BLOCK,
+      PIXELS_PER_BLOCK,
+    );
+
+    pixels.forEach(
+      (
+        pixelColor,
+        pixelIndex,
+      ) => {
+        const pixelRow =
+          Math.floor(
+            pixelIndex /
+              PIXELS_PER_BLOCK,
+          );
+
+        const pixelColumn =
+          pixelIndex %
+          PIXELS_PER_BLOCK;
+
+        texture.context.fillStyle =
+          pixelColor;
+
+        texture.context.fillRect(
+          textureX +
+            pixelColumn,
+          textureY +
+            pixelRow,
+          1,
+          1,
+        );
+      },
+    );
+
+    pixelTextureEntries.set(
+      blockKey,
+      {
+        pixels,
         row,
         column,
-      });
-
-      if (!block) {
-        continue;
-      }
-
-      const blockKey =
-        getBlockKey(
-          block.coordinate,
-        );
-
-      activeBlockKeys.add(blockKey);
-
-      const editorDraft =
-        editorState.isActive
-          ? editorState.drafts.get(
-              blockKey,
-            )
-          : undefined;
-
-      const pixels =
-        editorDraft?.pixels ??
-        block.pixels;
-
-      const existingEntry =
-        pixelTextureEntries.get(
-          blockKey,
-        );
-
-      /*
-       * Pixel arrays are replaced whenever a
-       * draft or saved Block changes. The same
-       * reference therefore means that this
-       * Block does not need to be redrawn.
-       */
-      if (
-        existingEntry?.pixels ===
-        pixels
-      ) {
-        continue;
-      }
-
-      const textureX =
-        column *
-        PIXELS_PER_BLOCK;
-
-      const textureY =
-        row *
-        PIXELS_PER_BLOCK;
-
-      texture.context.clearRect(
-        textureX,
-        textureY,
-        PIXELS_PER_BLOCK,
-        PIXELS_PER_BLOCK,
-      );
-
-      pixels.forEach(
-        (
-          pixelColor,
-          pixelIndex,
-        ) => {
-          const pixelRow =
-            Math.floor(
-              pixelIndex /
-                PIXELS_PER_BLOCK,
-            );
-
-          const pixelColumn =
-            pixelIndex %
-            PIXELS_PER_BLOCK;
-
-          texture.context.fillStyle =
-            pixelColor;
-
-          texture.context.fillRect(
-            textureX +
-              pixelColumn,
-            textureY + pixelRow,
-            1,
-            1,
-          );
-        },
-      );
-
-      pixelTextureEntries.set(
-        blockKey,
-        {
-          pixels,
-          row,
-          column,
-        },
-      );
-    }
+      },
+    );
   }
 
   /*
-   * Clear cached pixels if a Block is ever
-   * removed from the Board.
+   * Si un Block est supprimé du store,
+   * on efface également sa zone de la texture.
    */
   pixelTextureEntries.forEach(
     (entry, blockKey) => {
@@ -287,15 +269,18 @@ function renderPixels(
     return;
   }
 
+  const claimState =
+    getClaimState();
+
   context.save();
+
+  if (claimState.isActive) {
+    context.globalAlpha = 0.45;
+  }
 
   context.imageSmoothingEnabled =
     false;
 
-  /*
-   * The complete pixel layer is rendered as
-   * one continuous nearest-neighbour texture.
-   */
   context.drawImage(
     textureCanvas,
     0,
@@ -434,8 +419,8 @@ function renderEditorOverlay(
   }
 
   const hoverColor =
-    editorState.selectedColor.toLowerCase() ===
-    "#ffffff"
+    editorState.selectedColor
+      .toLowerCase() === "#ffffff"
       ? "#e5e7eb"
       : editorState.selectedColor;
 

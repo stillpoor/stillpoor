@@ -1,37 +1,31 @@
+import { boardConfig } from "../board/boardConfig";
 import {
   getBlockKey,
-  hasBlock,
   setBlock,
 } from "../board/boardStore";
-import {
-  PIXELS_PER_BLOCK,
-} from "../board/boardTypes";
+
 import {
   startEditor,
 } from "../editor/editorState";
+
 import {
   cancelClaim,
-  getClaimState,
 } from "./claimState";
 
 import type {
   Block,
   BlockCoordinate,
-  PixelColor,
 } from "../board/boardTypes";
 import type {
   BlockDraft,
 } from "../editor/editorTypes";
 
-const simulatedOwnerWalletAddress =
-  "bc1qstillpoorcurrentuser0000000000000000001";
-
-const defaultPixelColor: PixelColor = "#ffffff";
-
 function getPublicBlockNumber(
   block: BlockCoordinate,
 ) {
-  const blocksPerRow = 64;
+  const blocksPerRow =
+    boardConfig.width /
+    boardConfig.blockSize;
 
   return (
     block.row * blocksPerRow +
@@ -40,68 +34,51 @@ function getPublicBlockNumber(
   );
 }
 
-export function simulateClaimPurchase() {
-  const claimState = getClaimState();
-
-  if (
-    !claimState.isActive ||
-    claimState.blocks.length === 0
-  ) {
-    return;
+export function completeSimulatedClaimPurchase(
+  claimedBlocks: readonly Block[],
+) {
+  if (claimedBlocks.length === 0) {
+    return false;
   }
 
-  const unavailableBlock =
-    claimState.blocks.find((block) =>
-      hasBlock(block),
-    );
+  const purchasedBlocks =
+    claimedBlocks
+      .map((block) => ({
+        ...block,
 
-  if (unavailableBlock) {
-    console.error(
-      "Claim failed: Block is no longer available.",
-      unavailableBlock,
-    );
+        coordinate: {
+          ...block.coordinate,
+        },
 
-    return;
-  }
-
-  const purchasedBlocks = [
-    ...claimState.blocks,
-  ].sort(
-    (firstBlock, secondBlock) =>
-      getPublicBlockNumber(firstBlock) -
-      getPublicBlockNumber(secondBlock),
-  );
+        pixels: [
+          ...block.pixels,
+        ],
+      }))
+      .sort(
+        (firstBlock, secondBlock) =>
+          getPublicBlockNumber(
+            firstBlock.coordinate,
+          ) -
+          getPublicBlockNumber(
+            secondBlock.coordinate,
+          ),
+      );
 
   const drafts =
     new Map<string, BlockDraft>();
 
-  const timestamp = new Date().toISOString();
-
-  purchasedBlocks.forEach((coordinate) => {
-    const pixels = Array(
-      PIXELS_PER_BLOCK *
-        PIXELS_PER_BLOCK,
-    ).fill(defaultPixelColor) as PixelColor[];
-
-    const block: Block = {
-      coordinate,
-      ownerWalletAddress:
-        simulatedOwnerWalletAddress,
-      pixels,
-      description: null,
-      claimedAt: timestamp,
-      updatedAt: timestamp,
-      claimTransactionId:
-        `simulated-${getBlockKey(coordinate)}`,
-    };
-
+  purchasedBlocks.forEach((block) => {
     setBlock(block);
 
     drafts.set(
-      getBlockKey(coordinate),
+      getBlockKey(block.coordinate),
       {
-        pixels: [...pixels],
-        description: "",
+        pixels: [
+          ...block.pixels,
+        ],
+
+        description:
+          block.description ?? "",
       },
     );
   });
@@ -109,7 +86,13 @@ export function simulateClaimPurchase() {
   cancelClaim();
 
   startEditor(
-    purchasedBlocks,
+    purchasedBlocks.map(
+      (block) => ({
+        ...block.coordinate,
+      }),
+    ),
     drafts,
   );
+
+  return true;
 }

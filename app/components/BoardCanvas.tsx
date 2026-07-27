@@ -1,9 +1,18 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import {
+  useEffect,
+  useRef,
+} from "react";
 
+import {
+  loadClaimedBlocks,
+} from "../lib/board/boardDatabase";
 import { renderBoard } from "../lib/board/boardRender";
 import { boardState } from "../lib/board/boardState";
+import {
+  replaceBlocks,
+} from "../lib/board/boardStore";
 
 import { CameraController } from "../lib/camera/cameraController";
 import { cameraConfig } from "../lib/camera/cameraConfig";
@@ -19,7 +28,8 @@ export default function BoardCanvas() {
     useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas =
+      canvasRef.current;
 
     if (!canvas) {
       return;
@@ -37,8 +47,10 @@ export default function BoardCanvas() {
     let pixelRatio = 1;
 
     let hasInitializedCamera = false;
+    let hasBeenDisposed = false;
 
     let previousEditorIsActive = false;
+
     let previousEditorBlockKey:
       string | null = null;
 
@@ -101,12 +113,9 @@ export default function BoardCanvas() {
       );
 
     const getResponsiveEditorZoom = () => {
-      /*
-       * Ces valeurs seront affinées
-       * pendant la passe UI.
-       */
       const topControlsSpace = 220;
       const bottomControlsSpace = 280;
+
       const horizontalPadding = 48;
       const verticalPadding = 32;
 
@@ -131,10 +140,11 @@ export default function BoardCanvas() {
           boardState.blockSize,
       );
 
-      const minimumEditorZoom = Math.max(
-        6,
-        cameraConfig.minZoom,
-      );
+      const minimumEditorZoom =
+        Math.max(
+          6,
+          cameraConfig.minZoom,
+        );
 
       return Math.max(
         minimumEditorZoom,
@@ -156,10 +166,12 @@ export default function BoardCanvas() {
         editorState.blocks.length > 0;
 
       if (!isEditorActive) {
-        canvas.style.removeProperty("cursor");
-        cameraController.setNavigationEnabled(
-          true,
+        canvas.style.removeProperty(
+          "cursor",
         );
+
+        cameraController
+          .setNavigationEnabled(true);
 
         previousEditorIsActive = false;
         previousEditorBlockKey = null;
@@ -174,9 +186,8 @@ export default function BoardCanvas() {
         ];
 
       if (!currentBlock) {
-        cameraController.setNavigationEnabled(
-          false,
-        );
+        cameraController
+          .setNavigationEnabled(false);
 
         render();
         return;
@@ -190,12 +201,15 @@ export default function BoardCanvas() {
         !previousEditorIsActive ||
         previousEditorBlockKey !==
           currentBlockKey;
-      canvas.style.cursor = "crosshair";
-      cameraController.setNavigationEnabled(
-        false,
-      );
+
+      canvas.style.cursor =
+        "crosshair";
+
+      cameraController
+        .setNavigationEnabled(false);
 
       previousEditorIsActive = true;
+
       previousEditorBlockKey =
         currentBlockKey;
 
@@ -208,23 +222,23 @@ export default function BoardCanvas() {
         return;
       }
 
-      /*
-       * Une couleur, une description ou un pixel
-       * a changé, mais la caméra reste en place.
-       */
       render();
     };
 
-    const handleEditorStateChange = () => {
-      synchronizeEditorCamera(false);
-    };
+    const handleEditorStateChange =
+      () => {
+        synchronizeEditorCamera(false);
+      };
 
     const resizeCanvas = () => {
       const bounds =
         canvas.getBoundingClientRect();
 
-      viewportWidth = bounds.width;
-      viewportHeight = bounds.height;
+      viewportWidth =
+        bounds.width;
+
+      viewportHeight =
+        bounds.height;
 
       pixelRatio =
         window.devicePixelRatio || 1;
@@ -239,19 +253,43 @@ export default function BoardCanvas() {
 
       if (!hasInitializedCamera) {
         initializeCamera();
+
         hasInitializedCamera = true;
       }
 
-      /*
-       * En cas de redimensionnement,
-       * le Block édité doit être recentré
-       * avec un zoom adapté au nouvel espace.
-       */
       synchronizeEditorCamera(true);
     };
 
+    const loadBoard = async () => {
+      try {
+        const claimedBlocks =
+          await loadClaimedBlocks();
+
+        if (hasBeenDisposed) {
+          return;
+        }
+
+        replaceBlocks(
+          claimedBlocks,
+        );
+
+        render();
+      } catch (error) {
+        if (hasBeenDisposed) {
+          return;
+        }
+
+        console.warn(
+          "Unable to load claimed Blocks from Supabase:",
+          error,
+        );
+      }
+    };
+
     const resizeObserver =
-      new ResizeObserver(resizeCanvas);
+      new ResizeObserver(
+        resizeCanvas,
+      );
 
     const unsubscribeFromEditor =
       subscribeToEditor(
@@ -259,9 +297,14 @@ export default function BoardCanvas() {
       );
 
     resizeObserver.observe(canvas);
+
     resizeCanvas();
 
+    void loadBoard();
+
     return () => {
+      hasBeenDisposed = true;
+
       unsubscribeFromEditor();
       resizeObserver.disconnect();
       cameraController.destroy();

@@ -1,14 +1,24 @@
 "use client";
 
+import {
+  useState,
+} from "react";
+
 import { boardConfig } from "../lib/board/boardConfig";
+
 import { editorConfig } from "../lib/editor/editorConfig";
 import {
   closeEditor,
   saveEditor,
+  setCurrentEditorBlockIndex,
   setSelectedEditorColor,
   updateEditorDescription,
 } from "../lib/editor/editorState";
 import { useEditorState } from "../lib/editor/useEditorState";
+
+import {
+  useWalletState,
+} from "../lib/wallet/useWalletState";
 
 function getPublicBlockNumber(
   row: number,
@@ -26,7 +36,21 @@ function getPublicBlockNumber(
 }
 
 export default function BlockEditor() {
-  const editorState = useEditorState();
+  const editorState =
+    useEditorState();
+
+  const walletState =
+    useWalletState();
+
+  const [
+    isSaving,
+    setIsSaving,
+  ] = useState(false);
+
+  const [
+    saveError,
+    setSaveError,
+  ] = useState<string | null>(null);
 
   if (
     !editorState.isActive ||
@@ -40,6 +64,10 @@ export default function BlockEditor() {
       editorState.currentBlockIndex
     ];
 
+  if (!currentBlock) {
+    return null;
+  }
+
   const draft =
     editorState.drafts.get(
       `${currentBlock.row}:${currentBlock.column}`,
@@ -49,15 +77,107 @@ export default function BlockEditor() {
     return null;
   }
 
+  const blockCount =
+    editorState.blocks.length;
+
+  const hasPreviousBlock =
+    editorState.currentBlockIndex > 0;
+
+  const hasNextBlock =
+    editorState.currentBlockIndex <
+    blockCount - 1;
+
+  const showBlockNavigation =
+    blockCount > 1;
+
+  const handleSave = async () => {
+    const paymentAddress =
+      walletState.paymentAddress?.address;
+
+    if (!paymentAddress) {
+      setSaveError(
+        "Connect the wallet that owns this Block before saving.",
+      );
+
+      return;
+    }
+
+    setSaveError(null);
+    setIsSaving(true);
+
+    try {
+      await saveEditor(
+        paymentAddress,
+      );
+    } catch (error) {
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save the Blocks.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <aside className="pointer-events-auto absolute bottom-4 left-1/2 w-[calc(100%-2rem)] max-w-[560px] -translate-x-1/2 rounded-xl bg-white p-4 shadow-lg sm:bottom-8 sm:p-5">
-      <h2 className="text-lg font-semibold">
-        Block #
-        {getPublicBlockNumber(
-          currentBlock.row,
-          currentBlock.column,
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-lg font-semibold">
+          Block #
+          {getPublicBlockNumber(
+            currentBlock.row,
+            currentBlock.column,
+          )}
+        </h2>
+
+        {showBlockNavigation && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Previous Block"
+              disabled={
+                !hasPreviousBlock ||
+                isSaving
+              }
+              onClick={() =>
+                setCurrentEditorBlockIndex(
+                  editorState.currentBlockIndex -
+                    1,
+                )
+              }
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-sm disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              ←
+            </button>
+
+            <span className="min-w-20 text-center text-sm text-gray-600">
+              Block{" "}
+              {editorState.currentBlockIndex +
+                1}{" "}
+              of {blockCount}
+            </span>
+
+            <button
+              type="button"
+              aria-label="Next Block"
+              disabled={
+                !hasNextBlock ||
+                isSaving
+              }
+              onClick={() =>
+                setCurrentEditorBlockIndex(
+                  editorState.currentBlockIndex +
+                    1,
+                )
+              }
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-sm disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              →
+            </button>
+          </div>
         )}
-      </h2>
+      </div>
 
       <div className="mt-5">
         <label
@@ -70,6 +190,7 @@ export default function BlockEditor() {
         <textarea
           id="block-description"
           value={draft.description}
+          disabled={isSaving}
           onChange={(event) =>
             updateEditorDescription(
               currentBlock,
@@ -78,7 +199,7 @@ export default function BlockEditor() {
           }
           maxLength={300}
           placeholder="Describe your Block..."
-          className="h-24 w-full resize-none rounded-lg border border-gray-300 p-3 text-sm"
+          className="h-24 w-full resize-none rounded-lg border border-gray-300 p-3 text-sm disabled:opacity-60"
         />
       </div>
 
@@ -104,6 +225,7 @@ export default function BlockEditor() {
                       <button
                         key={color}
                         type="button"
+                        disabled={isSaving}
                         aria-label={`Select color ${color}`}
                         aria-pressed={isSelected}
                         title={color}
@@ -113,7 +235,7 @@ export default function BlockEditor() {
                           )
                         }
                         className={[
-                          "h-8 w-8 shrink-0 rounded-full border-2 transition",
+                          "h-8 w-8 shrink-0 rounded-full border-2 transition disabled:cursor-not-allowed disabled:opacity-50",
                           isSelected
                             ? "border-black ring-2 ring-black ring-offset-2"
                             : "border-gray-950 hover:scale-105",
@@ -132,21 +254,34 @@ export default function BlockEditor() {
         </div>
       </div>
 
+      {saveError && (
+        <p
+          role="alert"
+          className="mt-4 text-sm text-red-600"
+        >
+          {saveError}
+        </p>
+      )}
+
       <div className="mt-6 flex justify-end gap-2">
         <button
           type="button"
+          disabled={isSaving}
           onClick={closeEditor}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm"
+          className="rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
         >
           Cancel
         </button>
 
         <button
           type="button"
-          onClick={saveEditor}
-          className="rounded-lg bg-black px-4 py-2 text-sm text-white"
+          disabled={isSaving}
+          onClick={handleSave}
+          className="rounded-lg bg-black px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Done
+          {isSaving
+            ? "Saving..."
+            : "Done"}
         </button>
       </div>
     </aside>

@@ -9,9 +9,13 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@sats-connect/core": "^0.17.6",
+    "@supabase/supabase-js": "^2.110.8",
+    "bip322-js": "^3.0.0",
     "next": "16.2.11",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "sats-connect": "4.2.x"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

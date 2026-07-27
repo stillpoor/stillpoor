@@ -33,12 +33,8 @@ import {
 import { cameraConfig } from "./cameraConfig";
 import { cameraState } from "./cameraState";
 
-import type {
-  BlockCoordinate,
-} from "../board/boardTypes";
-import type {
-  PixelCoordinate,
-} from "../editor/editorCoordinates";
+import type { BlockCoordinate } from "../board/boardTypes";
+import type { PixelCoordinate } from "../editor/editorCoordinates";
 
 type CameraChangeHandler = () => void;
 
@@ -140,102 +136,105 @@ export class CameraController {
   }
 
   public focusBlock(
-  block: BlockCoordinate,
-  targetZoom: number,
-  preserveHigherZoom = false,
-) {
-  this.cancelFocusAnimation();
+    block: BlockCoordinate,
+    targetZoom: number,
+    preserveHigherZoom = false,
+  ) {
+    this.cancelFocusAnimation();
 
-  const startX = cameraState.x;
-  const startY = cameraState.y;
-  const startZoom = cameraState.zoom;
+    const startX = cameraState.x;
+    const startY = cameraState.y;
+    const startZoom = cameraState.zoom;
 
-  const requestedZoom = clamp(
-    targetZoom,
-    cameraConfig.minZoom,
-    cameraConfig.maxZoom,
-  );
-
-  /*
-   * Lors d'un clic sur un Block, on peut zoomer
-   * vers l'avant, mais jamais dézoomer.
-   */
-  const resolvedTargetZoom =
-    preserveHigherZoom
-      ? Math.max(startZoom, requestedZoom)
-      : requestedZoom;
-
-  const blockCenterX =
-    block.column * boardConfig.blockSize +
-    boardConfig.blockSize / 2;
-
-  const blockCenterY =
-    block.row * boardConfig.blockSize +
-    boardConfig.blockSize / 2;
-
-  const targetX =
-    -(
-      blockCenterX -
-      boardConfig.width / 2
-    ) * resolvedTargetZoom;
-
-  const targetY =
-    -(
-      blockCenterY -
-      boardConfig.height / 2
-    ) * resolvedTargetZoom;
-
-  const startedAt = performance.now();
-
-  const animate = (
-    currentTime: number,
-  ) => {
-    const elapsed =
-      currentTime - startedAt;
-
-    const progress = Math.min(
-      elapsed /
-        cameraConfig.focusDuration,
-      1,
+    const requestedZoom = clamp(
+      targetZoom,
+      cameraConfig.minZoom,
+      cameraConfig.maxZoom,
     );
 
-    const easedProgress =
-      easeOutCubic(progress);
+    const resolvedTargetZoom =
+      preserveHigherZoom
+        ? Math.max(
+            startZoom,
+            requestedZoom,
+          )
+        : requestedZoom;
 
-    cameraState.x =
-      startX +
-      (targetX - startX) *
-        easedProgress;
+    const blockCenterX =
+      block.column *
+        boardConfig.blockSize +
+      boardConfig.blockSize / 2;
 
-    cameraState.y =
-      startY +
-      (targetY - startY) *
-        easedProgress;
+    const blockCenterY =
+      block.row *
+        boardConfig.blockSize +
+      boardConfig.blockSize / 2;
 
-    cameraState.zoom =
-      startZoom +
-      (
-        resolvedTargetZoom -
-        startZoom
-      ) *
-        easedProgress;
+    const targetX =
+      -(
+        blockCenterX -
+        boardConfig.width / 2
+      ) * resolvedTargetZoom;
 
-    this.clampCameraPosition();
-    this.onCameraChange();
+    const targetY =
+      -(
+        blockCenterY -
+        boardConfig.height / 2
+      ) * resolvedTargetZoom;
 
-    if (progress < 1) {
-      this.focusAnimationFrameId =
-        requestAnimationFrame(animate);
+    const startedAt = performance.now();
 
-      return;
-    }
+    const animate = (
+      currentTime: number,
+    ) => {
+      const elapsed =
+        currentTime - startedAt;
 
-    this.focusAnimationFrameId = null;
-  };
+      const progress = Math.min(
+        elapsed /
+          cameraConfig.focusDuration,
+        1,
+      );
 
-  this.focusAnimationFrameId =
-    requestAnimationFrame(animate);
-}
+      const easedProgress =
+        easeOutCubic(progress);
+
+      cameraState.x =
+        startX +
+        (targetX - startX) *
+          easedProgress;
+
+      cameraState.y =
+        startY +
+        (targetY - startY) *
+          easedProgress;
+
+      cameraState.zoom =
+        startZoom +
+        (
+          resolvedTargetZoom -
+          startZoom
+        ) *
+          easedProgress;
+
+      this.clampCameraPosition();
+      this.onCameraChange();
+
+      if (progress < 1) {
+        this.focusAnimationFrameId =
+          requestAnimationFrame(
+            animate,
+          );
+
+        return;
+      }
+
+      this.focusAnimationFrameId = null;
+    };
+
+    this.focusAnimationFrameId =
+      requestAnimationFrame(animate);
+  }
 
   public destroy() {
     this.cancelFocusAnimation();
@@ -340,6 +339,89 @@ export class CameraController {
       minimumY,
       maximumY,
     );
+  }
+
+  private dismissSelectedOccupiedBlockIfFarFromCenter() {
+    if (
+      getAppMode() !== "browsing" ||
+      getClaimState().isActive
+    ) {
+      return;
+    }
+
+    const selectedBlock =
+      getSelectedBlock();
+
+    if (
+      !selectedBlock ||
+      !getBlock(selectedBlock)
+    ) {
+      return;
+    }
+
+    const bounds =
+      this.canvas.getBoundingClientRect();
+
+    const blockCenterX =
+      selectedBlock.column *
+        boardConfig.blockSize +
+      boardConfig.blockSize / 2;
+
+    const blockCenterY =
+      selectedBlock.row *
+        boardConfig.blockSize +
+      boardConfig.blockSize / 2;
+
+    /*
+     * Position du centre du Block par rapport
+     * au centre du viewport, en pixels écran.
+     */
+    const offsetFromViewportCenterX =
+      cameraState.x +
+      (
+        blockCenterX -
+        boardConfig.width / 2
+      ) *
+        cameraState.zoom;
+
+    const offsetFromViewportCenterY =
+      cameraState.y +
+      (
+        blockCenterY -
+        boardConfig.height / 2
+      ) *
+        cameraState.zoom;
+
+    const shortestViewportSide =
+      Math.min(
+        bounds.width,
+        bounds.height,
+      );
+
+    const dismissThreshold = clamp(
+      shortestViewportSide *
+        cameraConfig
+          .selectedBlockDismissThresholdRatio,
+      cameraConfig
+        .selectedBlockDismissThresholdMin,
+      cameraConfig
+        .selectedBlockDismissThresholdMax,
+    );
+
+    const distanceFromViewportCenter =
+      Math.hypot(
+        offsetFromViewportCenterX,
+        offsetFromViewportCenterY,
+      );
+
+    if (
+      distanceFromViewportCenter <=
+      dismissThreshold
+    ) {
+      return;
+    }
+
+    setSelectedBlock(null);
   }
 
   private updateHoveredBlock(
@@ -508,7 +590,7 @@ export class CameraController {
       this.onCameraChange();
 
       this.focusBlock(
-      block,
+        block,
         cameraConfig.claimFocusZoom,
         true,
       );
@@ -681,6 +763,9 @@ export class CameraController {
       this.startCameraY + deltaY;
 
     this.clampCameraPosition();
+
+    this.dismissSelectedOccupiedBlockIfFarFromCenter();
+
     this.updateHoveredBlock(event);
     this.onCameraChange();
   };

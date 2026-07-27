@@ -4,11 +4,33 @@ import { boardConfig } from "../lib/board/boardConfig";
 import { getBlock } from "../lib/board/boardStore";
 
 import { claimConfig } from "../lib/claim/claimConfig";
-import { simulateClaimPurchase } from "../lib/claim/claimPurchase";
 import { cancelClaim } from "../lib/claim/claimState";
 import { useClaimState } from "../lib/claim/useClaimState";
 
+import {
+  startEditorForExistingBlock,
+} from "../lib/editor/editorState";
+
+import { openPaymentModal } from "../lib/payment/paymentState";
+
+import {
+  useState,
+} from "react";
+
+import {
+  reserveClaimOrder,
+} from "../lib/payment/paymentApi";
+
+import {
+  getWalletState,
+} from "../lib/wallet/walletState";
+
 import { setSelectedBlock } from "../lib/selection/selectionState";
+
+import {
+  connectWallet,
+} from "../lib/wallet/walletState";
+import { useWalletState } from "../lib/wallet/useWalletState";
 
 import type { BlockCoordinate } from "../lib/board/boardTypes";
 
@@ -20,7 +42,8 @@ function getPublicBlockNumber(
   block: BlockCoordinate,
 ) {
   const columnCount =
-    boardConfig.width / boardConfig.blockSize;
+    boardConfig.width /
+    boardConfig.blockSize;
 
   return (
     block.row * columnCount +
@@ -32,18 +55,26 @@ function getPublicBlockNumber(
 function formatWalletAddress(
   walletAddress: string,
 ) {
-  return `${walletAddress.slice(0, 8)}…${walletAddress.slice(-6)}`;
+  return `${walletAddress.slice(
+    0,
+    8,
+  )}…${walletAddress.slice(-6)}`;
 }
 
 function formatDate(date: string) {
-  return new Intl.DateTimeFormat("en", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(date));
+  return new Intl.DateTimeFormat(
+    "en",
+    {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    },
+  ).format(new Date(date));
 }
 
-function formatBtcFromSats(sats: number) {
+function formatBtcFromSats(
+  sats: number,
+) {
   return `${(
     sats / 100_000_000
   ).toFixed(3)} BTC`;
@@ -53,7 +84,26 @@ export default function BlockInspector({
   block,
 }: BlockInspectorProps) {
   const claimState = useClaimState();
-  const occupiedBlock = getBlock(block);
+
+  const walletState =
+  useWalletState();
+
+  const [
+    isReserving,
+    setIsReserving,
+  ] = useState(false);
+
+  const [
+    reservationError,
+   setReservationError,
+  ] = useState<string | null>(null);
+
+  const currentWalletAddress =
+    walletState.paymentAddress?.address ??
+    null;
+
+  const occupiedBlock =
+    getBlock(block);
 
   const publicBlockNumber =
     getPublicBlockNumber(block);
@@ -65,13 +115,107 @@ export default function BlockInspector({
     selectedBlockCount *
     claimConfig.blockPriceSats;
 
+  const isOwnedByCurrentUser =
+  Boolean(
+    occupiedBlock &&
+      currentWalletAddress &&
+      occupiedBlock.ownerWalletAddress ===
+        currentWalletAddress,
+  );
+
   const handleCancelClaimMode = () => {
     cancelClaim();
     setSelectedBlock(null);
   };
 
-  const handleClaim = () => {
-    simulateClaimPurchase();
+  const handleClaim = async () => {
+  setReservationError(null);
+
+  let currentWalletState =
+    getWalletState();
+
+  if (
+    !currentWalletState.paymentAddress ||
+    !currentWalletState.ordinalsAddress
+  ) {
+    const connected =
+      await connectWallet();
+
+    if (!connected) {
+      return;
+    }
+
+    currentWalletState =
+      getWalletState();
+  }
+
+  const paymentAddress =
+    currentWalletState
+      .paymentAddress?.address;
+
+  const ordinalsAddress =
+    currentWalletState
+      .ordinalsAddress?.address;
+
+  if (
+    !paymentAddress ||
+    !ordinalsAddress
+  ) {
+    setReservationError(
+      "Both Bitcoin wallet addresses are required.",
+    );
+
+    return;
+  }
+
+  setIsReserving(true);
+
+  try {
+    const reservation =
+      await reserveClaimOrder({
+        paymentAddress,
+        ordinalsAddress,
+        blocks:
+          claimState.blocks,
+      });
+
+    openPaymentModal({
+      orderId:
+        reservation.orderId,
+
+      expiresAt:
+        reservation.expiresAt,
+
+      paymentAddress,
+
+      blocks:
+        claimState.blocks,
+
+      totalPriceSats:
+        reservation.amountSats,
+    });
+  } catch (error) {
+    setReservationError(
+      error instanceof Error
+        ? error.message
+        : "Unable to reserve the selected Blocks.",
+    );
+  } finally {
+    setIsReserving(false);
+  }
+};
+
+  const handleEditBlock = () => {
+    if (
+      !occupiedBlock ||
+      !isOwnedByCurrentUser
+    ) {
+      return;
+    }
+
+    startEditorForExistingBlock(
+      block,
+    );
   };
 
   if (occupiedBlock) {
@@ -93,7 +237,8 @@ export default function BlockInspector({
 
             <dd className="mt-1 font-medium">
               {formatWalletAddress(
-                occupiedBlock.ownerWalletAddress,
+                occupiedBlock
+                  .ownerWalletAddress,
               )}
             </dd>
           </div>
@@ -105,7 +250,9 @@ export default function BlockInspector({
               </dt>
 
               <dd className="mt-1">
-                {occupiedBlock.description}
+                {
+                  occupiedBlock.description
+                }
               </dd>
             </div>
           )}
@@ -128,10 +275,23 @@ export default function BlockInspector({
             </dt>
 
             <dd className="mt-1 break-all font-mono text-xs">
-              {occupiedBlock.claimTransactionId}
+              {
+                occupiedBlock
+                  .claimTransactionId
+              }
             </dd>
           </div>
         </dl>
+
+        {isOwnedByCurrentUser && (
+          <button
+            type="button"
+            onClick={handleEditBlock}
+            className="mt-5 w-full rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white"
+          >
+            Edit Block
+          </button>
+        )}
       </aside>
     );
   }
@@ -180,23 +340,50 @@ export default function BlockInspector({
           <div className="mt-4 flex gap-2">
             <button
               type="button"
-              onClick={handleCancelClaimMode}
+              onClick={
+                handleCancelClaimMode
+              }
               className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium"
             >
               Cancel
             </button>
 
             <button
-              type="button"
-              onClick={handleClaim}
-              className="flex-1 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white"
-            >
-              Claim ·{" "}
-              {formatBtcFromSats(
-                totalPriceSats,
-              )}
-            </button>
+  type="button"
+  onClick={handleClaim}
+  disabled={
+  selectedBlockCount === 0 ||
+  walletState.isConnecting ||
+  isReserving
+}
+  className="flex-1 rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+>
+  {isReserving
+  ? "Reserving..."
+  : walletState.isConnecting
+    ? "Connecting..."
+    : walletState.paymentAddress
+      ? (
+        <>
+          Claim ·{" "}
+          {formatBtcFromSats(
+            totalPriceSats,
+          )}
+        </>
+      )
+      : "Connect to Claim"}
+</button>
           </div>
+          
+          {reservationError && (
+  <p
+    role="alert"
+    className="mt-3 text-sm text-red-600"
+  >
+    {reservationError}
+  </p>
+)}
+
         </>
       )}
     </aside>
