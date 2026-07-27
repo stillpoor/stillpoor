@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 import BoardViewport from "./components/BoardViewport";
 import HUD from "./components/HUD";
 
@@ -7,13 +9,18 @@ export default function HomePage() {
 
   if (isComingSoon) {
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-[#e9e9e9] px-6 text-[#111111]">
-        <div className="text-center">
-          <h1 className="text-5xl font-bold tracking-[-0.06em] sm:text-7xl">
-            stillpoor
-          </h1>
+      <main className="flex min-h-dvh items-center justify-center bg-[#e9e9e9] px-6">
+        <div className="flex flex-col items-center text-center">
+          <Image
+            src="/stillpoor-logo.svg"
+            alt="StillPoor"
+            width={396}
+            height={123}
+            priority
+            className="h-auto w-[264px] sm:w-[330px]"
+          />
 
-          <p className="mt-4 text-sm uppercase tracking-[0.24em] text-black/55">
+          <p className="mt-7 text-xl font-medium tracking-[-0.025em] text-[#030712]/55 sm:text-2xl">
             Coming soon
           </p>
         </div>

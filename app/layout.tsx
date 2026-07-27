@@ -1,6 +1,12 @@
 import "./globals.css";
 
 import type { Metadata } from "next";
+import { Bricolage_Grotesque } from "next/font/google";
+
+const bricolageGrotesque = Bricolage_Grotesque({
+  subsets: ["latin"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "StillPoor",
@@ -14,7 +20,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className={`${bricolageGrotesque.className} antialiased`}>
+        {children}
+      </body>
     </html>
   );
 }
