@@ -3,6 +3,8 @@ export const cameraConfig = {
   maxZoom: 20,
   zoomSensitivity: 0.0015,
 
+  controlZoomFactor: 1.4,
+
   minimumVisibleBoardSize: 96,
   dragThreshold: 4,
 

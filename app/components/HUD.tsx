@@ -16,6 +16,8 @@ import {
   useSelectedBlock,
 } from "../lib/selection/useSelectedBlock";
 
+import BoardControls from "./BoardControls";
+
 export default function HUD() {
   const editorState =
     useEditorState();
@@ -44,17 +46,21 @@ export default function HUD() {
         <WalletButton />
       </div>
 
-      {editorState.isActive ? (
-        <BlockEditor />
-      ) : (
-        selectedBlock && (
-          <BlockInspector
-            block={selectedBlock}
-          />
-        )
-      )}
+{editorState.isActive ? (
+  <BlockEditor />
+) : (
+  selectedBlock && (
+    <BlockInspector
+      block={selectedBlock}
+    />
+  )
+)}
 
-      <PaymentModal />
+<BoardControls
+  disabled={editorState.isActive}
+/>
+
+<PaymentModal />
     </div>
   );
 }

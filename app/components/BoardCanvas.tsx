@@ -106,17 +106,23 @@ export default function BoardCanvas() {
       );
     };
 
-    const initializeCamera = () => {
+    const getFitZoom = () => {
       const horizontalMargin = 48;
       const verticalMargin = 48;
 
       const availableWidth =
-        viewportWidth -
-        horizontalMargin * 2;
+        Math.max(
+          viewportWidth -
+            horizontalMargin * 2,
+          1,
+        );
 
       const availableHeight =
-        viewportHeight -
-        verticalMargin * 2;
+        Math.max(
+          viewportHeight -
+            verticalMargin * 2,
+          1,
+        );
 
       const fitZoom =
         Math.min(
@@ -127,18 +133,21 @@ export default function BoardCanvas() {
             boardState.height,
         );
 
+      return Math.max(
+        cameraConfig.minZoom,
+
+        Math.min(
+          fitZoom,
+          cameraConfig.maxZoom,
+        ),
+      );
+    };
+
+    const initializeCamera = () => {
       cameraState.x = 0;
       cameraState.y = 0;
-
       cameraState.zoom =
-        Math.max(
-          cameraConfig.minZoom,
-
-          Math.min(
-            fitZoom,
-            cameraConfig.maxZoom,
-          ),
-        );
+        getFitZoom();
     };
 
     const cameraController =
@@ -146,6 +155,25 @@ export default function BoardCanvas() {
         canvas,
         render,
       );
+
+    const handleZoomIn = () => {
+      cameraController.zoomBy(
+        cameraConfig.controlZoomFactor,
+      );
+    };
+
+    const handleZoomOut = () => {
+      cameraController.zoomBy(
+        1 /
+          cameraConfig.controlZoomFactor,
+      );
+    };
+
+    const handleRecenter = () => {
+      cameraController.recenter(
+        getFitZoom(),
+      );
+    };
 
     const handleFocusClaimBlock = (
       event: Event,
@@ -263,6 +291,7 @@ export default function BoardCanvas() {
           null;
 
         render();
+
         return;
       }
 
@@ -276,6 +305,7 @@ export default function BoardCanvas() {
           .setNavigationEnabled(false);
 
         render();
+
         return;
       }
 
@@ -396,6 +426,21 @@ export default function BoardCanvas() {
       subscribeToClaim(render);
 
     window.addEventListener(
+      "board:zoom-in",
+      handleZoomIn,
+    );
+
+    window.addEventListener(
+      "board:zoom-out",
+      handleZoomOut,
+    );
+
+    window.addEventListener(
+      "board:recenter",
+      handleRecenter,
+    );
+
+    window.addEventListener(
       "board:focus-claim-block",
       handleFocusClaimBlock,
     );
@@ -418,6 +463,21 @@ export default function BoardCanvas() {
 
       unsubscribeFromEditor();
       unsubscribeFromClaim();
+
+      window.removeEventListener(
+        "board:zoom-in",
+        handleZoomIn,
+      );
+
+      window.removeEventListener(
+        "board:zoom-out",
+        handleZoomOut,
+      );
+
+      window.removeEventListener(
+        "board:recenter",
+        handleRecenter,
+      );
 
       window.removeEventListener(
         "board:focus-claim-block",
