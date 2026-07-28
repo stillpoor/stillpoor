@@ -3,8 +3,25 @@ import type {
   BlockCoordinate,
 } from "./boardTypes";
 
+type BoardListener = () => void;
+
 const blocks =
   new Map<string, Block>();
+
+const listeners =
+  new Set<BoardListener>();
+
+let blocksSnapshot:
+  readonly Block[] = [];
+
+function notifyListeners() {
+  blocksSnapshot =
+    Array.from(blocks.values());
+
+  listeners.forEach((listener) => {
+    listener();
+  });
+}
 
 export function getBlockKey(
   coordinate: BlockCoordinate,
@@ -24,6 +41,10 @@ export function getBlocks() {
   return blocks.values();
 }
 
+export function getBlocksSnapshot() {
+  return blocksSnapshot;
+}
+
 export function setBlock(
   block: Block,
 ) {
@@ -31,6 +52,8 @@ export function setBlock(
     getBlockKey(block.coordinate),
     block,
   );
+
+  notifyListeners();
 }
 
 export function replaceBlocks(
@@ -39,8 +62,15 @@ export function replaceBlocks(
   blocks.clear();
 
   for (const block of nextBlocks) {
-    setBlock(block);
+    blocks.set(
+      getBlockKey(
+        block.coordinate,
+      ),
+      block,
+    );
   }
+
+  notifyListeners();
 }
 
 export function hasBlock(
@@ -49,4 +79,14 @@ export function hasBlock(
   return blocks.has(
     getBlockKey(coordinate),
   );
+}
+
+export function subscribeToBlocks(
+  listener: BoardListener,
+) {
+  listeners.add(listener);
+
+  return () => {
+    listeners.delete(listener);
+  };
 }
