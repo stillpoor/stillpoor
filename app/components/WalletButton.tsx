@@ -55,6 +55,10 @@ import type {
   Block,
 } from "../lib/board/boardTypes";
 
+interface HudPanelOpenedEventDetail {
+  panel?: string;
+}
+
 function formatWalletAddress(
   walletAddress: string,
 ) {
@@ -166,8 +170,7 @@ export default function WalletButton() {
       return boardBlocks
         .filter(
           (block) =>
-            block
-              .ownerWalletAddress ===
+            block.ownerWalletAddress ===
             paymentAddress,
         )
         .sort(
@@ -226,6 +229,36 @@ export default function WalletButton() {
   }, [
     isMenuOpen,
   ]);
+
+  useEffect(() => {
+    const handlePanelOpened = (
+      event: Event,
+    ) => {
+      const customEvent =
+        event as CustomEvent<HudPanelOpenedEventDetail>;
+
+      if (
+        customEvent.detail?.panel ===
+        "profile"
+      ) {
+        return;
+      }
+
+      setIsMenuOpen(false);
+    };
+
+    window.addEventListener(
+      "hud:panel-opened",
+      handlePanelOpened,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "hud:panel-opened",
+        handlePanelOpened,
+      );
+    };
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -292,10 +325,25 @@ export default function WalletButton() {
         authState.isAuthenticated &&
         paymentAddress
       ) {
+        const nextIsMenuOpen =
+          !isMenuOpen;
+
         setIsMenuOpen(
-          (currentValue) =>
-            !currentValue,
+          nextIsMenuOpen,
         );
+
+        if (nextIsMenuOpen) {
+          window.dispatchEvent(
+            new CustomEvent(
+              "hud:panel-opened",
+              {
+                detail: {
+                  panel: "profile",
+                },
+              },
+            ),
+          );
+        }
 
         return;
       }
@@ -307,10 +355,8 @@ export default function WalletButton() {
 
       let isConnected =
         Boolean(
-          walletState
-            .paymentAddress &&
-            walletState
-              .ordinalsAddress,
+          walletState.paymentAddress &&
+            walletState.ordinalsAddress,
         );
 
       if (!isConnected) {
@@ -459,8 +505,7 @@ export default function WalletButton() {
   const isWalletBusy =
     walletState.isRestoring ||
     walletState.isConnecting ||
-    authState
-      .isRestoringSession ||
+    authState.isRestoringSession ||
     authState.isAuthenticating ||
     isDisconnecting;
 
@@ -542,9 +587,7 @@ export default function WalletButton() {
               </p>
 
               <p
-                title={
-                  paymentAddress
-                }
+                title={paymentAddress}
                 className="mt-1 font-mono text-sm font-semibold text-black"
               >
                 {formatWalletAddress(
@@ -595,8 +638,7 @@ export default function WalletButton() {
                     event,
                   ) => {
                     setUsernameDraft(
-                      event.target
-                        .value,
+                      event.target.value,
                     );
 
                     setProfileError(
@@ -654,9 +696,7 @@ export default function WalletButton() {
                 </p>
 
                 <p className="text-xs font-semibold text-black/45">
-                  {
-                    ownedBlocks.length
-                  }
+                  {ownedBlocks.length}
                 </p>
               </div>
 
@@ -693,16 +733,13 @@ export default function WalletButton() {
                           <span className="min-w-0 flex-1">
                             <span className="block text-sm font-semibold text-black">
                               Block #
-                              {
-                                blockNumber
-                              }
+                              {blockNumber}
                             </span>
 
                             <span className="mt-0.5 block text-xs text-black/45">
                               Claimed{" "}
                               {formatClaimDate(
-                                block
-                                  .claimedAt,
+                                block.claimedAt,
                               )}
                             </span>
                           </span>
