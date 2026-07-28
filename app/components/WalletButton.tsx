@@ -3,7 +3,6 @@
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 
@@ -31,6 +30,11 @@ import {
 import {
   useBoardBlocks,
 } from "../lib/board/useBoardBlocks";
+
+import {
+  loadWalletProfile,
+  updateWalletProfile,
+} from "../lib/profile/profileApi";
 
 import {
   setSelectedBlock,
@@ -91,9 +95,6 @@ function getPublicBlockNumber(
 }
 
 export default function WalletButton() {
-  const menuRef =
-    useRef<HTMLDivElement>(null);
-
   const walletState =
     useWalletState();
 
@@ -120,9 +121,38 @@ export default function WalletButton() {
     null,
   );
 
+  const [
+    username,
+    setUsername,
+  ] = useState<string | null>(
+    null,
+  );
+
+  const [
+    usernameDraft,
+    setUsernameDraft,
+  ] = useState("");
+
+  const [
+    isProfileLoading,
+    setIsProfileLoading,
+  ] = useState(false);
+
+  const [
+    isSavingProfile,
+    setIsSavingProfile,
+  ] = useState(false);
+
+  const [
+    profileError,
+    setProfileError,
+  ] = useState<string | null>(
+    null,
+  );
+
   const paymentAddress =
-    walletState.paymentAddress?.address ??
-    null;
+    walletState.paymentAddress
+      ?.address ?? null;
 
   const ownedBlocks =
     useMemo(() => {
@@ -136,7 +166,8 @@ export default function WalletButton() {
       return boardBlocks
         .filter(
           (block) =>
-            block.ownerWalletAddress ===
+            block
+              .ownerWalletAddress ===
             paymentAddress,
         )
         .sort(
@@ -168,31 +199,92 @@ export default function WalletButton() {
     })();
   }, []);
 
-useEffect(() => {
-  if (!isMenuOpen) {
-    return;
-  }
-
-  const handleKeyDown = (
-    event: KeyboardEvent,
-  ) => {
-    if (event.key === "Escape") {
-      setIsMenuOpen(false);
+  useEffect(() => {
+    if (!isMenuOpen) {
+      return;
     }
-  };
 
-  document.addEventListener(
-    "keydown",
-    handleKeyDown,
-  );
+    const handleKeyDown = (
+      event: KeyboardEvent,
+    ) => {
+      if (event.key === "Escape") {
+        setIsMenuOpen(false);
+      }
+    };
 
-  return () => {
-    document.removeEventListener(
+    document.addEventListener(
       "keydown",
       handleKeyDown,
     );
-  };
-}, [isMenuOpen]);
+
+    return () => {
+      document.removeEventListener(
+        "keydown",
+        handleKeyDown,
+      );
+    };
+  }, [
+    isMenuOpen,
+  ]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    if (
+      !authState.isAuthenticated ||
+      !paymentAddress
+    ) {
+      setUsername(null);
+      setUsernameDraft("");
+      setProfileError(null);
+      setIsProfileLoading(false);
+
+      return () => {
+        isActive = false;
+      };
+    }
+
+    setIsProfileLoading(true);
+    setProfileError(null);
+
+    void loadWalletProfile()
+      .then((profile) => {
+        if (!isActive) {
+          return;
+        }
+
+        setUsername(
+          profile.username,
+        );
+
+        setUsernameDraft(
+          profile.username ?? "",
+        );
+      })
+      .catch((error) => {
+        if (!isActive) {
+          return;
+        }
+
+        setProfileError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load the profile.",
+        );
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsProfileLoading(false);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [
+    authState.isAuthenticated,
+    paymentAddress,
+  ]);
 
   const handleWalletAction =
     async () => {
@@ -215,8 +307,10 @@ useEffect(() => {
 
       let isConnected =
         Boolean(
-          walletState.paymentAddress &&
-            walletState.ordinalsAddress,
+          walletState
+            .paymentAddress &&
+            walletState
+              .ordinalsAddress,
         );
 
       if (!isConnected) {
@@ -229,6 +323,75 @@ useEffect(() => {
       }
 
       await authenticateWallet();
+    };
+
+  const handleSaveUsername =
+    async () => {
+      if (
+        isSavingProfile ||
+        isProfileLoading
+      ) {
+        return;
+      }
+
+      const trimmedUsername =
+        usernameDraft.trim();
+
+      if (
+        trimmedUsername !== "" &&
+        !/^[A-Za-z0-9_]{3,20}$/.test(
+          trimmedUsername,
+        )
+      ) {
+        setProfileError(
+          "Username must contain 3–20 letters, numbers or underscores.",
+        );
+
+        return;
+      }
+
+      setProfileError(null);
+      setIsSavingProfile(true);
+
+      try {
+        const profile =
+          await updateWalletProfile(
+            trimmedUsername === ""
+              ? null
+              : trimmedUsername,
+          );
+
+        setUsername(
+          profile.username,
+        );
+
+        setUsernameDraft(
+          profile.username ?? "",
+        );
+
+        if (paymentAddress) {
+          window.dispatchEvent(
+            new CustomEvent(
+              "profile:updated",
+              {
+                detail: {
+                  paymentAddress,
+                  username:
+                    profile.username,
+                },
+              },
+            ),
+          );
+        }
+      } catch (error) {
+        setProfileError(
+          error instanceof Error
+            ? error.message
+            : "Unable to update the profile.",
+        );
+      } finally {
+        setIsSavingProfile(false);
+      }
     };
 
   const handleOwnedBlockClick = (
@@ -258,8 +421,11 @@ useEffect(() => {
       }
 
       setDisconnectError(null);
+      setProfileError(null);
+
       clearWalletError();
       clearAuthError();
+
       setIsDisconnecting(true);
 
       try {
@@ -269,6 +435,8 @@ useEffect(() => {
 
         await disconnectWallet();
 
+        setUsername(null);
+        setUsernameDraft("");
         setIsMenuOpen(false);
       } catch (error) {
         setDisconnectError(
@@ -281,10 +449,18 @@ useEffect(() => {
       }
     };
 
+  const trimmedUsernameDraft =
+    usernameDraft.trim();
+
+  const hasUsernameChanged =
+    trimmedUsernameDraft !==
+    (username ?? "");
+
   const isWalletBusy =
     walletState.isRestoring ||
     walletState.isConnecting ||
-    authState.isRestoringSession ||
+    authState
+      .isRestoringSession ||
     authState.isAuthenticating ||
     isDisconnecting;
 
@@ -322,6 +498,7 @@ useEffect(() => {
     paymentAddress
   ) {
     buttonText =
+      username ??
       formatWalletAddress(
         paymentAddress,
       );
@@ -331,10 +508,7 @@ useEffect(() => {
   }
 
   return (
-    <div
-      ref={menuRef}
-      className="relative flex flex-col items-end gap-2"
-    >
+    <div className="relative flex flex-col items-end gap-2">
       <button
         type="button"
         onClick={handleWalletAction}
@@ -346,7 +520,7 @@ useEffect(() => {
         }
         aria-haspopup={
           authState.isAuthenticated
-            ? "menu"
+            ? "dialog"
             : undefined
         }
         className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-default disabled:opacity-70"
@@ -358,46 +532,120 @@ useEffect(() => {
         authState.isAuthenticated &&
         paymentAddress && (
           <div
-            role="menu"
+            role="dialog"
+            aria-label="Profile"
             className="absolute top-full right-0 mt-2 flex max-h-[calc(100vh-7rem)] w-80 flex-col overflow-hidden rounded-2xl border border-black/10 bg-white/95 shadow-xl backdrop-blur-md"
           >
             <header className="relative border-b border-black/10 px-4 py-4 pr-12">
-  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-black/45">
-    Wallet
-  </p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-black/45">
+                Profile
+              </p>
 
-  <p
-    title={paymentAddress}
-    className="mt-1 font-mono text-sm font-semibold text-black"
-  >
-    {formatWalletAddress(
-      paymentAddress,
-    )}
-  </p>
+              <p
+                title={
+                  paymentAddress
+                }
+                className="mt-1 font-mono text-sm font-semibold text-black"
+              >
+                {formatWalletAddress(
+                  paymentAddress,
+                )}
+              </p>
 
-  <button
-    type="button"
-    onClick={() =>
-      setIsMenuOpen(false)
-    }
-    aria-label="Close profile menu"
-    className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg text-black/50 transition hover:bg-black/5 hover:text-black"
-  >
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className="h-4 w-4"
-    >
-      <path
-        d="M6 6l12 12M18 6L6 18"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  </button>
-</header>
+              <button
+                type="button"
+                onClick={() =>
+                  setIsMenuOpen(false)
+                }
+                aria-label="Close profile menu"
+                className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg text-black/50 transition hover:bg-black/5 hover:text-black"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  className="h-4 w-4"
+                >
+                  <path
+                    d="M6 6l12 12M18 6L6 18"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </header>
+
+            <section className="border-b border-black/10 px-4 py-4">
+              <label
+                htmlFor="profile-username"
+                className="text-xs font-semibold uppercase tracking-[0.14em] text-black/45"
+              >
+                Username
+              </label>
+
+              <div className="mt-2 flex gap-2">
+                <input
+                  id="profile-username"
+                  type="text"
+                  value={
+                    usernameDraft
+                  }
+                  onChange={(
+                    event,
+                  ) => {
+                    setUsernameDraft(
+                      event.target
+                        .value,
+                    );
+
+                    setProfileError(
+                      null,
+                    );
+                  }}
+                  maxLength={20}
+                  autoComplete="username"
+                  placeholder="Optional username"
+                  disabled={
+                    isProfileLoading ||
+                    isSavingProfile
+                  }
+                  className="min-w-0 flex-1 rounded-lg border border-black/15 bg-white px-3 py-2 text-sm text-black outline-none transition placeholder:text-black/35 focus:border-black/40 disabled:opacity-60"
+                />
+
+                <button
+                  type="button"
+                  onClick={
+                    handleSaveUsername
+                  }
+                  disabled={
+                    isProfileLoading ||
+                    isSavingProfile ||
+                    !hasUsernameChanged
+                  }
+                  className="rounded-lg bg-gray-950 px-3 py-2 text-sm font-medium text-white disabled:cursor-default disabled:opacity-35"
+                >
+                  {isSavingProfile
+                    ? "Saving..."
+                    : "Save"}
+                </button>
+              </div>
+
+              <p className="mt-2 text-xs text-black/40">
+                3–20 letters, numbers
+                or underscores. Leave
+                empty to remove.
+              </p>
+
+              {profileError && (
+                <p
+                  role="alert"
+                  className="mt-2 text-xs font-medium text-red-600"
+                >
+                  {profileError}
+                </p>
+              )}
+            </section>
 
             <section className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
               <div className="flex items-center justify-between px-1 pb-2">
@@ -406,13 +654,17 @@ useEffect(() => {
                 </p>
 
                 <p className="text-xs font-semibold text-black/45">
-                  {ownedBlocks.length}
+                  {
+                    ownedBlocks.length
+                  }
                 </p>
               </div>
 
-              {ownedBlocks.length === 0 ? (
+              {ownedBlocks.length ===
+              0 ? (
                 <p className="rounded-xl bg-black/5 px-3 py-4 text-sm text-black/55">
-                  You do not own any Blocks yet.
+                  You do not own any
+                  Blocks yet.
                 </p>
               ) : (
                 <div className="space-y-1">
@@ -427,7 +679,6 @@ useEffect(() => {
                         <button
                           key={`${block.coordinate.row}:${block.coordinate.column}`}
                           type="button"
-                          role="menuitem"
                           onClick={() =>
                             handleOwnedBlockClick(
                               block,
@@ -442,13 +693,16 @@ useEffect(() => {
                           <span className="min-w-0 flex-1">
                             <span className="block text-sm font-semibold text-black">
                               Block #
-                              {blockNumber}
+                              {
+                                blockNumber
+                              }
                             </span>
 
                             <span className="mt-0.5 block text-xs text-black/45">
                               Claimed{" "}
                               {formatClaimDate(
-                                block.claimedAt,
+                                block
+                                  .claimedAt,
                               )}
                             </span>
                           </span>
@@ -463,8 +717,12 @@ useEffect(() => {
             <footer className="border-t border-black/10 p-3">
               <button
                 type="button"
-                onClick={handleDisconnect}
-                disabled={isDisconnecting}
+                onClick={
+                  handleDisconnect
+                }
+                disabled={
+                  isDisconnecting
+                }
                 className="w-full rounded-lg border border-black/15 px-4 py-2 text-sm font-medium text-black disabled:opacity-50"
               >
                 {isDisconnecting
