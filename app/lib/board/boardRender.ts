@@ -25,6 +25,11 @@ import {
 } from "../ordinals/ordinalPreviewState";
 
 import {
+  getActiveBlockReservations,
+  isBlockReserved,
+} from "../payment/blockReservationState";
+
+import {
   PIXELS_PER_BLOCK,
 } from "./boardTypes";
 
@@ -42,20 +47,26 @@ interface ViewportSize {
 }
 
 interface PixelTextureEntry {
-  pixels: readonly string[];
+  pixels:
+    readonly string[];
+
   row: number;
   column: number;
 }
 
 let pixelTextureCanvas:
-  HTMLCanvasElement | null = null;
+  HTMLCanvasElement | null =
+    null;
 
 let pixelTextureContext:
   CanvasRenderingContext2D | null =
     null;
 
-let pixelTextureWidth = 0;
-let pixelTextureHeight = 0;
+let pixelTextureWidth =
+  0;
+
+let pixelTextureHeight =
+  0;
 
 const pixelTextureEntries =
   new Map<
@@ -186,10 +197,6 @@ function updatePixelTexture(
   const activeBlockKeys =
     new Set<string>();
 
-  /*
-   * On parcourt uniquement
-   * les Blocks occupés.
-   */
   for (
     const block of getBlocks()
   ) {
@@ -226,12 +233,6 @@ function updatePixelTexture(
         ? ordinalPreview.pixels
         : null;
 
-    /*
-     * L’éditeur reste prioritaire.
-     * Sinon, une version historique
-     * peut remplacer temporairement
-     * les Pixels actuels.
-     */
     const pixels =
       editorDraft?.pixels ??
       previewPixels ??
@@ -242,11 +243,6 @@ function updatePixelTexture(
         blockKey,
       );
 
-    /*
-     * Si le tableau de Pixels
-     * n’a pas changé, la texture
-     * est déjà à jour.
-     */
     if (
       existingEntry?.pixels ===
       pixels
@@ -310,11 +306,6 @@ function updatePixelTexture(
     );
   }
 
-  /*
-   * Si un Block est supprimé,
-   * sa zone est également effacée
-   * de la texture globale.
-   */
   pixelTextureEntries.forEach(
     (
       entry,
@@ -394,6 +385,71 @@ function renderPixels(
     boardState.width,
     boardState.height,
   );
+
+  context.restore();
+}
+
+function renderReservedBlocks(
+  context:
+    CanvasRenderingContext2D,
+
+  boardState:
+    BoardState,
+) {
+  const screenScale =
+    Math.abs(
+      context.getTransform().a,
+    ) || 1;
+
+  const borderWidth =
+    1 / screenScale;
+
+  context.save();
+
+  for (
+    const reservation of
+      getActiveBlockReservations()
+  ) {
+    const blockX =
+      reservation.coordinate
+        .column *
+      boardState.blockSize;
+
+    const blockY =
+      reservation.coordinate
+        .row *
+      boardState.blockSize;
+
+    context.fillStyle =
+      "#e5e7eb";
+
+    context.fillRect(
+      blockX,
+      blockY,
+      boardState.blockSize,
+      boardState.blockSize,
+    );
+
+    context.strokeStyle =
+      "#9ca3af";
+
+    context.lineWidth =
+      borderWidth;
+
+    context.strokeRect(
+      blockX +
+        borderWidth / 2,
+
+      blockY +
+        borderWidth / 2,
+
+      boardState.blockSize -
+        borderWidth,
+
+      boardState.blockSize -
+        borderWidth,
+    );
+  }
 
   context.restore();
 }
@@ -500,6 +556,14 @@ function renderHover(
   if (
     editorState.isActive ||
     !hoverState.block
+  ) {
+    return;
+  }
+
+  if (
+    isBlockReserved(
+      hoverState.block,
+    )
   ) {
     return;
   }
@@ -684,6 +748,11 @@ export function renderBoard(
   );
 
   renderPixels(
+    context,
+    boardState,
+  );
+
+  renderReservedBlocks(
     context,
     boardState,
   );

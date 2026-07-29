@@ -52,6 +52,10 @@ import {
   cameraState,
 } from "./cameraState";
 
+import {
+  isBlockReserved,
+} from "../payment/blockReservationState";
+
 import type {
   BlockCoordinate,
 } from "../board/boardTypes";
@@ -1008,7 +1012,7 @@ export class CameraController {
     this.onCameraChange();
   }
 
-  private handleBlockClick(
+    private handleBlockClick(
     block: BlockCoordinate,
   ) {
     const occupiedBlock =
@@ -1021,6 +1025,18 @@ export class CameraController {
         block,
       );
 
+      return;
+    }
+
+    /*
+     * Reserved Blocks are not owned yet,
+     * but they are temporarily unavailable.
+     */
+    if (
+      isBlockReserved(
+        block,
+      )
+    ) {
       return;
     }
 

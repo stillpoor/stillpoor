@@ -46,23 +46,35 @@ import {
   subscribeToOrdinalPreview,
 } from "../lib/ordinals/ordinalPreviewState";
 
+import {
+  loadActiveBlockReservations,
+} from "../lib/payment/blockReservationApi";
+
+import {
+  removeExpiredBlockReservations,
+  replaceActiveBlockReservations,
+  subscribeToBlockReservations,
+} from "../lib/payment/blockReservationState";
+
 import type {
   BlockCoordinate,
 } from "../lib/board/boardTypes";
 
 interface FocusClaimBlockEventDetail {
-  block: BlockCoordinate;
+  block:
+    BlockCoordinate;
 }
 
 interface FocusOwnedBlockEventDetail {
-  block: BlockCoordinate;
+  block:
+    BlockCoordinate;
 }
 
 export default function BoardCanvas() {
   const canvasRef =
-    useRef<HTMLCanvasElement>(
-      null,
-    );
+    useRef<
+      HTMLCanvasElement
+    >(null);
 
   useEffect(() => {
     const canvas =
@@ -101,6 +113,9 @@ export default function BoardCanvas() {
 
     let previousEditorBlockKey:
       string | null = null;
+
+    let reservationRequestId =
+      0;
 
     const render = () => {
       context.setTransform(
@@ -485,6 +500,59 @@ export default function BoardCanvas() {
         }
       };
 
+    const loadReservations =
+      async () => {
+        const requestId =
+          reservationRequestId +
+          1;
+
+        reservationRequestId =
+          requestId;
+
+        try {
+          const activeReservations =
+            await loadActiveBlockReservations();
+
+          if (
+            hasBeenDisposed ||
+            requestId !==
+              reservationRequestId
+          ) {
+            return;
+          }
+
+          replaceActiveBlockReservations(
+            activeReservations,
+          );
+        } catch (error) {
+          if (
+            hasBeenDisposed
+          ) {
+            return;
+          }
+
+          console.warn(
+            "Unable to load active Block reservations:",
+            error,
+          );
+        }
+      };
+
+    const handleReservationRefresh =
+      () => {
+        void loadReservations();
+      };
+
+    const handleVisibilityChange =
+      () => {
+        if (
+          document.visibilityState ===
+          "visible"
+        ) {
+          void loadReservations();
+        }
+      };
+
     const resizeObserver =
       new ResizeObserver(
         resizeCanvas,
@@ -503,6 +571,27 @@ export default function BoardCanvas() {
     const unsubscribeFromOrdinalPreview =
       subscribeToOrdinalPreview(
         render,
+      );
+
+    const unsubscribeFromReservations =
+      subscribeToBlockReservations(
+        render,
+      );
+
+    const reservationRefreshIntervalId =
+      window.setInterval(
+        () => {
+          void loadReservations();
+        },
+        5_000,
+      );
+
+    const reservationExpiryIntervalId =
+      window.setInterval(
+        () => {
+          removeExpiredBlockReservations();
+        },
+        1_000,
       );
 
     window.addEventListener(
@@ -530,6 +619,16 @@ export default function BoardCanvas() {
       handleFocusOwnedBlock,
     );
 
+    window.addEventListener(
+      "board-stats:refresh",
+      handleReservationRefresh,
+    );
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange,
+    );
+
     resizeObserver.observe(
       canvas,
     );
@@ -537,16 +636,24 @@ export default function BoardCanvas() {
     resizeCanvas();
 
     void loadBoard();
+    void loadReservations();
 
     return () => {
       hasBeenDisposed =
         true;
 
       unsubscribeFromEditor();
-
       unsubscribeFromClaim();
-
       unsubscribeFromOrdinalPreview();
+      unsubscribeFromReservations();
+
+      window.clearInterval(
+        reservationRefreshIntervalId,
+      );
+
+      window.clearInterval(
+        reservationExpiryIntervalId,
+      );
 
       window.removeEventListener(
         "board:zoom-in",
@@ -571,6 +678,16 @@ export default function BoardCanvas() {
       window.removeEventListener(
         "board:focus-owned-block",
         handleFocusOwnedBlock,
+      );
+
+      window.removeEventListener(
+        "board-stats:refresh",
+        handleReservationRefresh,
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange,
       );
 
       resizeObserver.disconnect();
