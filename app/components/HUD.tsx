@@ -43,14 +43,12 @@ export default function HUD() {
 
   const handleOpenAbout =
     () => {
-      setIsActivityOpen(false);
+      /*
+       * About est un overlay indépendant.
+       * Les menus ouverts en dessous
+       * conservent leur état.
+       */
       setIsAboutOpen(true);
-
-      window.dispatchEvent(
-        new CustomEvent(
-          "profile:close",
-        ),
-      );
     };
 
   const handleToggleActivity =
@@ -58,16 +56,25 @@ export default function HUD() {
       const shouldOpen =
         !isActivityOpen;
 
-      setIsAboutOpen(false);
-
       setIsActivityOpen(
         shouldOpen,
       );
 
       if (shouldOpen) {
+        /*
+         * WalletButton écoute déjà cet
+         * événement et ferme le menu Profile
+         * lorsqu’un autre panneau s’ouvre.
+         */
         window.dispatchEvent(
           new CustomEvent(
-            "profile:close",
+            "hud:panel-opened",
+            {
+              detail: {
+                panel:
+                  "activity",
+              },
+            },
           ),
         );
       }
@@ -162,7 +169,9 @@ export default function HUD() {
       <OrdinalMintModal />
 
       <AboutModal
-        isOpen={isAboutOpen}
+        isOpen={
+          isAboutOpen
+        }
         onClose={() =>
           setIsAboutOpen(
             false,

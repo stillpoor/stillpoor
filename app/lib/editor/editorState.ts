@@ -566,10 +566,21 @@ export async function saveEditor(
         });
 
       savedBlocks.forEach(
-        saveBlockToStore,
-      );
+  saveBlockToStore,
+);
 
-      setSelectedBlock(null);
+const savedBlock =
+  savedBlocks.length === 1
+    ? savedBlocks[0]
+    : null;
+
+setSelectedBlock(
+  savedBlock
+    ? {
+        ...savedBlock.coordinate,
+      }
+    : null,
+);
     }
 
     setAppMode("browsing");

@@ -42,6 +42,10 @@ import {
   subscribeToEditor,
 } from "../lib/editor/editorState";
 
+import {
+  subscribeToOrdinalPreview,
+} from "../lib/ordinals/ordinalPreviewState";
+
 import type {
   BlockCoordinate,
 } from "../lib/board/boardTypes";
@@ -56,7 +60,9 @@ interface FocusOwnedBlockEventDetail {
 
 export default function BoardCanvas() {
   const canvasRef =
-    useRef<HTMLCanvasElement>(null);
+    useRef<HTMLCanvasElement>(
+      null,
+    );
 
   useEffect(() => {
     const canvas =
@@ -67,20 +73,31 @@ export default function BoardCanvas() {
     }
 
     const context =
-      canvas.getContext("2d");
+      canvas.getContext(
+        "2d",
+      );
 
     if (!context) {
       return;
     }
 
-    let viewportWidth = 0;
-    let viewportHeight = 0;
-    let pixelRatio = 1;
+    let viewportWidth =
+      0;
 
-    let hasInitializedCamera = false;
-    let hasBeenDisposed = false;
+    let viewportHeight =
+      0;
 
-    let previousEditorIsActive = false;
+    let pixelRatio =
+      1;
+
+    let hasInitializedCamera =
+      false;
+
+    let hasBeenDisposed =
+      false;
+
+    let previousEditorIsActive =
+      false;
 
     let previousEditorBlockKey:
       string | null = null;
@@ -100,27 +117,37 @@ export default function BoardCanvas() {
         boardState,
         cameraState,
         {
-          width: viewportWidth,
-          height: viewportHeight,
+          width:
+            viewportWidth,
+
+          height:
+            viewportHeight,
         },
       );
     };
 
     const getFitZoom = () => {
-      const horizontalMargin = 48;
-      const verticalMargin = 48;
+      const horizontalMargin =
+        48;
+
+      const verticalMargin =
+        48;
 
       const availableWidth =
         Math.max(
           viewportWidth -
-            horizontalMargin * 2,
+            horizontalMargin *
+              2,
+
           1,
         );
 
       const availableHeight =
         Math.max(
           viewportHeight -
-            verticalMargin * 2,
+            verticalMargin *
+              2,
+
           1,
         );
 
@@ -143,12 +170,17 @@ export default function BoardCanvas() {
       );
     };
 
-    const initializeCamera = () => {
-      cameraState.x = 0;
-      cameraState.y = 0;
-      cameraState.zoom =
-        getFitZoom();
-    };
+    const initializeCamera =
+      () => {
+        cameraState.x =
+          0;
+
+        cameraState.y =
+          0;
+
+        cameraState.zoom =
+          getFitZoom();
+      };
 
     const cameraController =
       new CameraController(
@@ -156,77 +188,99 @@ export default function BoardCanvas() {
         render,
       );
 
-    const handleZoomIn = () => {
-      cameraController.zoomBy(
-        cameraConfig.controlZoomFactor,
-      );
-    };
+    const handleZoomIn =
+      () => {
+        cameraController.zoomBy(
+          cameraConfig
+            .controlZoomFactor,
+        );
+      };
 
-    const handleZoomOut = () => {
-      cameraController.zoomBy(
-        1 /
-          cameraConfig.controlZoomFactor,
-      );
-    };
+    const handleZoomOut =
+      () => {
+        cameraController.zoomBy(
+          1 /
+            cameraConfig
+              .controlZoomFactor,
+        );
+      };
 
-    const handleRecenter = () => {
-      cameraController.recenter(
-        getFitZoom(),
-      );
-    };
+    const handleRecenter =
+      () => {
+        cameraController.recenter(
+          getFitZoom(),
+        );
+      };
 
-    const handleFocusClaimBlock = (
-      event: Event,
-    ) => {
-      const customEvent =
-        event as CustomEvent<FocusClaimBlockEventDetail>;
+    const handleFocusClaimBlock =
+      (
+        event: Event,
+      ) => {
+        const customEvent =
+          event as CustomEvent<FocusClaimBlockEventDetail>;
 
-      const block =
-        customEvent.detail?.block;
+        const block =
+          customEvent.detail
+            ?.block;
 
-      if (!block) {
-        return;
-      }
+        if (!block) {
+          return;
+        }
 
-      cameraController.focusBlock(
-        block,
-        cameraConfig.claimFocusZoom,
-        true,
-      );
-    };
+        cameraController.focusBlock(
+          block,
 
-    const handleFocusOwnedBlock = (
-      event: Event,
-    ) => {
-      const customEvent =
-        event as CustomEvent<FocusOwnedBlockEventDetail>;
+          cameraConfig
+            .claimFocusZoom,
 
-      const block =
-        customEvent.detail?.block;
+          true,
+        );
+      };
 
-      if (!block) {
-        return;
-      }
+    const handleFocusOwnedBlock =
+      (
+        event: Event,
+      ) => {
+        const customEvent =
+          event as CustomEvent<FocusOwnedBlockEventDetail>;
 
-      cameraController.focusBlock(
-        block,
-        cameraConfig.occupiedFocusZoom,
-        true,
-      );
-    };
+        const block =
+          customEvent.detail
+            ?.block;
+
+        if (!block) {
+          return;
+        }
+
+        cameraController.focusBlock(
+          block,
+
+          cameraConfig
+            .occupiedFocusZoom,
+
+          true,
+        );
+      };
 
     const getResponsiveEditorZoom =
       () => {
-        const topControlsSpace = 220;
-        const bottomControlsSpace = 280;
+        const topControlsSpace =
+          220;
 
-        const horizontalPadding = 48;
-        const verticalPadding = 32;
+        const bottomControlsSpace =
+          280;
+
+        const horizontalPadding =
+          48;
+
+        const verticalPadding =
+          32;
 
         const availableWidth =
           Math.max(
             viewportWidth -
-              horizontalPadding * 2,
+              horizontalPadding *
+                2,
 
             boardState.blockSize,
           );
@@ -236,7 +290,8 @@ export default function BoardCanvas() {
             viewportHeight -
               topControlsSpace -
               bottomControlsSpace -
-              verticalPadding * 2,
+              verticalPadding *
+                2,
 
             boardState.blockSize,
           );
@@ -266,81 +321,90 @@ export default function BoardCanvas() {
         );
       };
 
-    const synchronizeEditorCamera = (
-      forceFocus = false,
-    ) => {
-      const editorState =
-        getEditorState();
+    const synchronizeEditorCamera =
+      (
+        forceFocus = false,
+      ) => {
+        const editorState =
+          getEditorState();
 
-      const isEditorActive =
-        editorState.isActive &&
-        editorState.blocks.length > 0;
+        const isEditorActive =
+          editorState.isActive &&
+          editorState.blocks
+            .length > 0;
 
-      if (!isEditorActive) {
-        canvas.style.removeProperty(
-          "cursor",
-        );
+        if (!isEditorActive) {
+          canvas.style.removeProperty(
+            "cursor",
+          );
+
+          cameraController
+            .setNavigationEnabled(
+              true,
+            );
+
+          previousEditorIsActive =
+            false;
+
+          previousEditorBlockKey =
+            null;
+
+          render();
+
+          return;
+        }
+
+        const currentBlock =
+          editorState.blocks[
+            editorState
+              .currentBlockIndex
+          ];
+
+        if (!currentBlock) {
+          cameraController
+            .setNavigationEnabled(
+              false,
+            );
+
+          render();
+
+          return;
+        }
+
+        const currentBlockKey =
+          `${currentBlock.row}:${currentBlock.column}`;
+
+        const shouldFocus =
+          forceFocus ||
+          !previousEditorIsActive ||
+          previousEditorBlockKey !==
+            currentBlockKey;
+
+        canvas.style.cursor =
+          "crosshair";
 
         cameraController
-          .setNavigationEnabled(true);
+          .setNavigationEnabled(
+            false,
+          );
 
         previousEditorIsActive =
-          false;
+          true;
 
         previousEditorBlockKey =
-          null;
-
-        render();
-
-        return;
-      }
-
-      const currentBlock =
-        editorState.blocks[
-          editorState.currentBlockIndex
-        ];
-
-      if (!currentBlock) {
-        cameraController
-          .setNavigationEnabled(false);
-
-        render();
-
-        return;
-      }
-
-      const currentBlockKey =
-        `${currentBlock.row}:${currentBlock.column}`;
-
-      const shouldFocus =
-        forceFocus ||
-        !previousEditorIsActive ||
-        previousEditorBlockKey !==
           currentBlockKey;
 
-      canvas.style.cursor =
-        "crosshair";
+        if (shouldFocus) {
+          cameraController.focusBlock(
+            currentBlock,
+            getResponsiveEditorZoom(),
+          );
 
-      cameraController
-        .setNavigationEnabled(false);
+          return;
+        }
 
-      previousEditorIsActive =
-        true;
-
-      previousEditorBlockKey =
-        currentBlockKey;
-
-      if (shouldFocus) {
-        cameraController.focusBlock(
-          currentBlock,
-          getResponsiveEditorZoom(),
-        );
-
-        return;
-      }
-
-      render();
-    };
+        render();
+      };
 
     const handleEditorStateChange =
       () => {
@@ -349,68 +413,77 @@ export default function BoardCanvas() {
         );
       };
 
-    const resizeCanvas = () => {
-      const bounds =
-        canvas.getBoundingClientRect();
+    const resizeCanvas =
+      () => {
+        const bounds =
+          canvas.getBoundingClientRect();
 
-      viewportWidth =
-        bounds.width;
+        viewportWidth =
+          bounds.width;
 
-      viewportHeight =
-        bounds.height;
+        viewportHeight =
+          bounds.height;
 
-      pixelRatio =
-        window.devicePixelRatio || 1;
+        pixelRatio =
+          window.devicePixelRatio ||
+          1;
 
-      canvas.width =
-        Math.round(
-          viewportWidth *
-            pixelRatio,
-        );
+        canvas.width =
+          Math.round(
+            viewportWidth *
+              pixelRatio,
+          );
 
-      canvas.height =
-        Math.round(
-          viewportHeight *
-            pixelRatio,
-        );
+        canvas.height =
+          Math.round(
+            viewportHeight *
+              pixelRatio,
+          );
 
-      if (!hasInitializedCamera) {
-        initializeCamera();
+        if (
+          !hasInitializedCamera
+        ) {
+          initializeCamera();
 
-        hasInitializedCamera =
-          true;
-      }
-
-      synchronizeEditorCamera(
-        true,
-      );
-    };
-
-    const loadBoard = async () => {
-      try {
-        const claimedBlocks =
-          await loadClaimedBlocks();
-
-        if (hasBeenDisposed) {
-          return;
+          hasInitializedCamera =
+            true;
         }
 
-        replaceBlocks(
-          claimedBlocks,
+        synchronizeEditorCamera(
+          true,
         );
+      };
 
-        render();
-      } catch (error) {
-        if (hasBeenDisposed) {
-          return;
+    const loadBoard =
+      async () => {
+        try {
+          const claimedBlocks =
+            await loadClaimedBlocks();
+
+          if (
+            hasBeenDisposed
+          ) {
+            return;
+          }
+
+          replaceBlocks(
+            claimedBlocks,
+          );
+
+          render();
+        } catch (error) {
+          if (
+            hasBeenDisposed
+          ) {
+            return;
+          }
+
+          console.warn(
+            "Unable to load claimed Blocks from Supabase:",
+            error,
+          );
         }
-
-        console.warn(
-          "Unable to load claimed Blocks from Supabase:",
-          error,
-        );
-      }
-    };
+      };
 
     const resizeObserver =
       new ResizeObserver(
@@ -423,7 +496,14 @@ export default function BoardCanvas() {
       );
 
     const unsubscribeFromClaim =
-      subscribeToClaim(render);
+      subscribeToClaim(
+        render,
+      );
+
+    const unsubscribeFromOrdinalPreview =
+      subscribeToOrdinalPreview(
+        render,
+      );
 
     window.addEventListener(
       "board:zoom-in",
@@ -459,10 +539,14 @@ export default function BoardCanvas() {
     void loadBoard();
 
     return () => {
-      hasBeenDisposed = true;
+      hasBeenDisposed =
+        true;
 
       unsubscribeFromEditor();
+
       unsubscribeFromClaim();
+
+      unsubscribeFromOrdinalPreview();
 
       window.removeEventListener(
         "board:zoom-in",

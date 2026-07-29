@@ -1,11 +1,19 @@
-import { getAppMode } from "../app/appState";
+import {
+  getAppMode,
+} from "../app/appState";
 
-import { boardConfig } from "../board/boardConfig";
+import {
+  boardConfig,
+} from "../board/boardConfig";
+
 import {
   boardPointToBlock,
   screenToBoard,
 } from "../board/boardCoordinates";
-import { getBlock } from "../board/boardStore";
+
+import {
+  getBlock,
+} from "../board/boardStore";
 
 import {
   enterClaimMode,
@@ -13,30 +21,47 @@ import {
   toggleClaimBlock,
 } from "../claim/claimState";
 
-import { boardPointToPixel } from "../editor/editorCoordinates";
+import {
+  boardPointToPixel,
+} from "../editor/editorCoordinates";
+
 import {
   getHoveredPixel,
   setHoveredPixel,
 } from "../editor/editorHoverState";
+
 import {
   getEditorState,
   paintPixel,
 } from "../editor/editorState";
 
-import { hoverState } from "../hover/hoverState";
+import {
+  hoverState,
+} from "../hover/hoverState";
 
 import {
   getSelectedBlock,
   setSelectedBlock,
 } from "../selection/selectionState";
 
-import { cameraConfig } from "./cameraConfig";
-import { cameraState } from "./cameraState";
+import {
+  cameraConfig,
+} from "./cameraConfig";
 
-import type { BlockCoordinate } from "../board/boardTypes";
-import type { PixelCoordinate } from "../editor/editorCoordinates";
+import {
+  cameraState,
+} from "./cameraState";
 
-type CameraChangeHandler = () => void;
+import type {
+  BlockCoordinate,
+} from "../board/boardTypes";
+
+import type {
+  PixelCoordinate,
+} from "../editor/editorCoordinates";
+
+type CameraChangeHandler =
+  () => void;
 
 function clamp(
   value: number,
@@ -44,13 +69,24 @@ function clamp(
   maximum: number,
 ) {
   return Math.min(
-    Math.max(value, minimum),
+    Math.max(
+      value,
+      minimum,
+    ),
     maximum,
   );
 }
 
-function easeOutCubic(progress: number) {
-  return 1 - Math.pow(1 - progress, 3);
+function easeOutCubic(
+  progress: number,
+) {
+  return (
+    1 -
+    Math.pow(
+      1 - progress,
+      3,
+    )
+  );
 }
 
 function areSameBlock(
@@ -58,8 +94,10 @@ function areSameBlock(
   secondBlock: BlockCoordinate,
 ) {
   return (
-    firstBlock.row === secondBlock.row &&
-    firstBlock.column === secondBlock.column
+    firstBlock.row ===
+      secondBlock.row &&
+    firstBlock.column ===
+      secondBlock.column
   );
 }
 
@@ -70,28 +108,48 @@ function getPixelKey(
 }
 
 export class CameraController {
-  private isDragging = false;
-  private hasDragged = false;
+  private isDragging =
+    false;
 
-  private isPainting = false;
+  private hasDragged =
+    false;
+
+  private isPainting =
+    false;
 
   private lastPaintedPixelKey:
     string | null = null;
 
-  private startPointerX = 0;
-  private startPointerY = 0;
+  private startPointerX =
+    0;
 
-  private startCameraX = 0;
-  private startCameraY = 0;
+  private startPointerY =
+    0;
+
+  private startCameraX =
+    0;
+
+  private startCameraY =
+    0;
 
   private focusAnimationFrameId:
     number | null = null;
 
-  private isNavigationEnabled = true;
+  private isNavigationEnabled =
+    true;
+
+  private selectedBlockZoomReference:
+    number | null = null;
+
+  private selectedBlockZoomKey:
+    string | null = null;
 
   constructor(
-    private readonly canvas: HTMLCanvasElement,
-    private readonly onCameraChange: CameraChangeHandler,
+    private readonly canvas:
+      HTMLCanvasElement,
+
+    private readonly onCameraChange:
+      CameraChangeHandler,
   ) {
     this.canvas.addEventListener(
       "pointerdown",
@@ -199,7 +257,8 @@ export class CameraController {
       currentTime: number,
     ) => {
       const elapsed =
-        currentTime - startedAt;
+        currentTime -
+        startedAt;
 
       const progress =
         Math.min(
@@ -209,16 +268,24 @@ export class CameraController {
         );
 
       const easedProgress =
-        easeOutCubic(progress);
+        easeOutCubic(
+          progress,
+        );
 
       cameraState.x =
         startX +
-        (targetX - startX) *
+        (
+          targetX -
+          startX
+        ) *
           easedProgress;
 
       cameraState.y =
         startY +
-        (targetY - startY) *
+        (
+          targetY -
+          startY
+        ) *
           easedProgress;
 
       cameraState.zoom =
@@ -256,7 +323,9 @@ export class CameraController {
   ) {
     if (
       !this.isNavigationEnabled ||
-      !Number.isFinite(zoomFactor) ||
+      !Number.isFinite(
+        zoomFactor,
+      ) ||
       zoomFactor <= 0
     ) {
       return;
@@ -269,19 +338,39 @@ export class CameraController {
 
     const nextZoom =
       clamp(
-        previousZoom * zoomFactor,
+        previousZoom *
+          zoomFactor,
+
         cameraConfig.minZoom,
         cameraConfig.maxZoom,
       );
 
+    const isFullZoomOutAction =
+      zoomFactor <=
+      1 /
+        cameraConfig
+          .controlZoomFactor +
+        0.000001;
+
+    if (isFullZoomOutAction) {
+      this.dismissSelectedOccupiedBlock();
+    } else {
+      this.dismissSelectedOccupiedBlockAfterZoom(
+        previousZoom,
+        nextZoom,
+      );
+    }
+
     if (
-      nextZoom === previousZoom
+      nextZoom ===
+      previousZoom
     ) {
       return;
     }
 
     const cameraPositionScale =
-      nextZoom / previousZoom;
+      nextZoom /
+      previousZoom;
 
     cameraState.zoom =
       nextZoom;
@@ -304,7 +393,9 @@ export class CameraController {
   ) {
     if (
       !this.isNavigationEnabled ||
-      !Number.isFinite(targetZoom)
+      !Number.isFinite(
+        targetZoom,
+      )
     ) {
       return;
     }
@@ -323,7 +414,7 @@ export class CameraController {
 
     this.clampCameraPosition();
 
-    this.dismissSelectedOccupiedBlockIfFarFromCenter();
+    this.dismissSelectedOccupiedBlock();
 
     this.onCameraChange();
   }
@@ -380,7 +471,9 @@ export class CameraController {
 
   private stopPainting() {
     this.isPainting = false;
-    this.lastPaintedPixelKey = null;
+
+    this.lastPaintedPixelKey =
+      null;
   }
 
   private clampCameraPosition() {
@@ -400,7 +493,8 @@ export class CameraController {
       ) / 2;
 
     const minimumVisible =
-      cameraConfig.minimumVisibleBoardSize;
+      cameraConfig
+        .minimumVisibleBoardSize;
 
     const minimumX =
       minimumVisible -
@@ -437,9 +531,18 @@ export class CameraController {
       );
   }
 
-  private dismissSelectedOccupiedBlockIfFarFromCenter() {
+  private resetSelectedBlockZoomTracking() {
+    this.selectedBlockZoomReference =
+      null;
+
+    this.selectedBlockZoomKey =
+      null;
+  }
+
+  private dismissSelectedOccupiedBlock() {
     if (
-      getAppMode() !== "browsing" ||
+      getAppMode() !==
+        "browsing" ||
       getClaimState().isActive
     ) {
       return;
@@ -450,7 +553,116 @@ export class CameraController {
 
     if (
       !selectedBlock ||
-      !getBlock(selectedBlock)
+      !getBlock(
+        selectedBlock,
+      )
+    ) {
+      this.resetSelectedBlockZoomTracking();
+
+      return;
+    }
+
+    setSelectedBlock(
+      null,
+    );
+
+    this.resetSelectedBlockZoomTracking();
+  }
+
+  private dismissSelectedOccupiedBlockAfterZoom(
+    previousZoom: number,
+    nextZoom: number,
+  ) {
+    if (
+      getAppMode() !==
+        "browsing" ||
+      getClaimState().isActive
+    ) {
+      this.resetSelectedBlockZoomTracking();
+
+      return;
+    }
+
+    const selectedBlock =
+      getSelectedBlock();
+
+    if (
+      !selectedBlock ||
+      !getBlock(
+        selectedBlock,
+      )
+    ) {
+      this.resetSelectedBlockZoomTracking();
+
+      return;
+    }
+
+    const selectedBlockKey =
+      `${selectedBlock.row}:${selectedBlock.column}`;
+
+    if (
+      this.selectedBlockZoomKey !==
+        selectedBlockKey ||
+      this.selectedBlockZoomReference ===
+        null
+    ) {
+      this.selectedBlockZoomKey =
+        selectedBlockKey;
+
+      this.selectedBlockZoomReference =
+        previousZoom;
+    }
+
+    if (
+      nextZoom >
+      previousZoom
+    ) {
+      this.selectedBlockZoomReference =
+        nextZoom;
+
+      return;
+    }
+
+    if (
+      nextZoom >=
+      previousZoom
+    ) {
+      return;
+    }
+
+    const dismissZoom =
+      this.selectedBlockZoomReference /
+      cameraConfig
+        .controlZoomFactor;
+
+    if (
+      nextZoom >
+      dismissZoom +
+        0.000001
+    ) {
+      return;
+    }
+
+    this.dismissSelectedOccupiedBlock();
+  }
+
+  private dismissSelectedOccupiedBlockIfFarFromCenter() {
+    if (
+      getAppMode() !==
+        "browsing" ||
+      getClaimState().isActive
+    ) {
+      return;
+    }
+
+    const selectedBlock =
+      getSelectedBlock();
+
+    if (
+      !selectedBlock ||
+      !getBlock(
+        selectedBlock,
+      )
     ) {
       return;
     }
@@ -516,7 +728,7 @@ export class CameraController {
       return;
     }
 
-    setSelectedBlock(null);
+    this.dismissSelectedOccupiedBlock();
   }
 
   private updateHoveredBlock(
@@ -534,8 +746,11 @@ export class CameraController {
           bounds.top,
 
         {
-          width: bounds.width,
-          height: bounds.height,
+          width:
+            bounds.width,
+
+          height:
+            bounds.height,
         },
 
         cameraState,
@@ -551,9 +766,13 @@ export class CameraController {
     event: PointerEvent,
   ) {
     if (
-      getAppMode() !== "editor"
+      getAppMode() !==
+      "editor"
     ) {
-      setHoveredPixel(null);
+      setHoveredPixel(
+        null,
+      );
+
       return;
     }
 
@@ -562,11 +781,15 @@ export class CameraController {
 
     const currentBlock =
       editorState.blocks[
-        editorState.currentBlockIndex
+        editorState
+          .currentBlockIndex
       ];
 
     if (!currentBlock) {
-      setHoveredPixel(null);
+      setHoveredPixel(
+        null,
+      );
+
       return;
     }
 
@@ -582,8 +805,11 @@ export class CameraController {
           bounds.top,
 
         {
-          width: bounds.width,
-          height: bounds.height,
+          width:
+            bounds.width,
+
+          height:
+            bounds.height,
         },
 
         cameraState,
@@ -601,7 +827,10 @@ export class CameraController {
         currentBlock,
       )
     ) {
-      setHoveredPixel(null);
+      setHoveredPixel(
+        null,
+      );
+
       return;
     }
 
@@ -616,7 +845,8 @@ export class CameraController {
   private paintHoveredPixelIfNeeded() {
     if (
       !this.isPainting ||
-      getAppMode() !== "editor"
+      getAppMode() !==
+        "editor"
     ) {
       return;
     }
@@ -645,7 +875,8 @@ export class CameraController {
 
     const currentBlock =
       editorState.blocks[
-        editorState.currentBlockIndex
+        editorState
+          .currentBlockIndex
       ];
 
     if (!currentBlock) {
@@ -680,18 +911,29 @@ export class CameraController {
         block,
       )
     ) {
-      setSelectedBlock(null);
+      setSelectedBlock(
+        null,
+      );
+
+      this.resetSelectedBlockZoomTracking();
+
       this.onCameraChange();
 
       return;
     }
 
-    setSelectedBlock(block);
+    this.resetSelectedBlockZoomTracking();
+
+    setSelectedBlock(
+      block,
+    );
+
     this.onCameraChange();
 
     this.focusBlock(
       block,
-      cameraConfig.occupiedFocusZoom,
+      cameraConfig
+        .occupiedFocusZoom,
       true,
     );
   }
@@ -703,21 +945,29 @@ export class CameraController {
       getClaimState();
 
     if (!claimState.isActive) {
-      enterClaimMode(block);
-      setSelectedBlock(block);
+      enterClaimMode(
+        block,
+      );
+
+      setSelectedBlock(
+        block,
+      );
 
       this.onCameraChange();
 
       this.focusBlock(
         block,
-        cameraConfig.claimFocusZoom,
+        cameraConfig
+          .claimFocusZoom,
         true,
       );
 
       return;
     }
 
-    toggleClaimBlock(block);
+    toggleClaimBlock(
+      block,
+    );
 
     const updatedClaimState =
       getClaimState();
@@ -725,11 +975,15 @@ export class CameraController {
     if (
       !updatedClaimState.isActive
     ) {
-      setSelectedBlock(null);
+      setSelectedBlock(
+        null,
+      );
     } else {
       const isStillClaimed =
         updatedClaimState.blocks.some(
-          (claimedBlock) =>
+          (
+            claimedBlock,
+          ) =>
             areSameBlock(
               claimedBlock,
               block,
@@ -737,12 +991,15 @@ export class CameraController {
         );
 
       if (isStillClaimed) {
-        setSelectedBlock(block);
+        setSelectedBlock(
+          block,
+        );
       } else {
         setSelectedBlock(
           updatedClaimState.blocks[
-            updatedClaimState.blocks
-              .length - 1
+            updatedClaimState
+              .blocks.length -
+              1
           ],
         );
       }
@@ -755,7 +1012,9 @@ export class CameraController {
     block: BlockCoordinate,
   ) {
     const occupiedBlock =
-      getBlock(block);
+      getBlock(
+        block,
+      );
 
     if (occupiedBlock) {
       this.handleOccupiedBlockClick(
@@ -773,12 +1032,15 @@ export class CameraController {
   private handlePointerDown = (
     event: PointerEvent,
   ) => {
-    if (event.button !== 0) {
+    if (
+      event.button !== 0
+    ) {
       return;
     }
 
     if (
-      getAppMode() === "editor"
+      getAppMode() ===
+      "editor"
     ) {
       event.preventDefault();
 
@@ -793,14 +1055,18 @@ export class CameraController {
         return;
       }
 
-      this.isPainting = true;
-      this.lastPaintedPixelKey = null;
+      this.isPainting =
+        true;
+
+      this.lastPaintedPixelKey =
+        null;
 
       this.canvas.setPointerCapture(
         event.pointerId,
       );
 
       this.paintHoveredPixelIfNeeded();
+
       this.onCameraChange();
 
       return;
@@ -816,8 +1082,11 @@ export class CameraController {
 
     this.cancelFocusAnimation();
 
-    this.isDragging = true;
-    this.hasDragged = false;
+    this.isDragging =
+      true;
+
+    this.hasDragged =
+      false;
 
     this.startPointerX =
       event.clientX;
@@ -840,13 +1109,15 @@ export class CameraController {
     event: PointerEvent,
   ) => {
     if (
-      getAppMode() === "editor"
+      getAppMode() ===
+      "editor"
     ) {
       this.updateHoveredEditorPixel(
         event,
       );
 
       this.paintHoveredPixelIfNeeded();
+
       this.onCameraChange();
 
       return;
@@ -856,8 +1127,11 @@ export class CameraController {
       event,
     );
 
-    if (!this.isDragging) {
+    if (
+      !this.isDragging
+    ) {
       this.onCameraChange();
+
       return;
     }
 
@@ -880,10 +1154,12 @@ export class CameraController {
       cameraConfig.dragThreshold
     ) {
       this.onCameraChange();
+
       return;
     }
 
-    this.hasDragged = true;
+    this.hasDragged =
+      true;
 
     cameraState.x =
       this.startCameraX +
@@ -908,7 +1184,8 @@ export class CameraController {
     event: PointerEvent,
   ) => {
     if (
-      getAppMode() === "editor"
+      getAppMode() ===
+      "editor"
     ) {
       this.stopPainting();
 
@@ -925,11 +1202,14 @@ export class CameraController {
       return;
     }
 
-    if (!this.isDragging) {
+    if (
+      !this.isDragging
+    ) {
       return;
     }
 
-    this.isDragging = false;
+    this.isDragging =
+      false;
 
     if (
       !this.hasDragged &&
@@ -956,8 +1236,11 @@ export class CameraController {
   ) => {
     this.stopPainting();
 
-    this.isDragging = false;
-    this.hasDragged = false;
+    this.isDragging =
+      false;
+
+    this.hasDragged =
+      false;
 
     if (
       this.canvas.hasPointerCapture(
@@ -970,23 +1253,32 @@ export class CameraController {
     }
   };
 
-  private handlePointerLeave = () => {
-    if (
-      getAppMode() === "editor"
-    ) {
-      setHoveredPixel(null);
+  private handlePointerLeave =
+    () => {
+      if (
+        getAppMode() ===
+        "editor"
+      ) {
+        setHoveredPixel(
+          null,
+        );
+
+        this.onCameraChange();
+
+        return;
+      }
+
+      if (
+        this.isDragging
+      ) {
+        return;
+      }
+
+      hoverState.block =
+        null;
+
       this.onCameraChange();
-
-      return;
-    }
-
-    if (this.isDragging) {
-      return;
-    }
-
-    hoverState.block = null;
-    this.onCameraChange();
-  };
+    };
 
   private handleWheel = (
     event: WheelEvent,
@@ -1024,7 +1316,8 @@ export class CameraController {
     const zoomMultiplier =
       Math.exp(
         -event.deltaY *
-          cameraConfig.zoomSensitivity,
+          cameraConfig
+            .zoomSensitivity,
       );
 
     const nextZoom =
@@ -1037,10 +1330,16 @@ export class CameraController {
       );
 
     if (
-      nextZoom === previousZoom
+      nextZoom ===
+      previousZoom
     ) {
       return;
     }
+
+    this.dismissSelectedOccupiedBlockAfterZoom(
+      previousZoom,
+      nextZoom,
+    );
 
     const worldX =
       (
@@ -1062,12 +1361,14 @@ export class CameraController {
     cameraState.x =
       pointerX -
       viewportCenterX -
-      worldX * nextZoom;
+      worldX *
+        nextZoom;
 
     cameraState.y =
       pointerY -
       viewportCenterY -
-      worldY * nextZoom;
+      worldY *
+        nextZoom;
 
     this.clampCameraPosition();
 

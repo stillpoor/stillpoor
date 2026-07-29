@@ -28,6 +28,19 @@ import {
 } from "../lib/editor/editorState";
 
 import {
+  loadOrdinalBlockHistory,
+} from "../lib/ordinals/ordinalHistoryApi";
+
+import {
+  openFirstOrdinalMintModal,
+} from "../lib/ordinals/ordinalMintState";
+
+import {
+  clearOrdinalPreview,
+  setOrdinalPreview,
+} from "../lib/ordinals/ordinalPreviewState";
+
+import {
   reserveClaimOrder,
 } from "../lib/payment/paymentApi";
 
@@ -56,9 +69,9 @@ import type {
   BlockCoordinate,
 } from "../lib/board/boardTypes";
 
-import {
-  openFirstOrdinalMintModal,
-} from "../lib/ordinals/ordinalMintState";
+import type {
+  OrdinalBlockVersion,
+} from "../lib/ordinals/ordinalHistoryApi";
 
 interface BlockInspectorProps {
   block: BlockCoordinate;
@@ -147,6 +160,39 @@ export default function BlockInspector({
     null,
   );
 
+  const [
+    ordinalVersions,
+    setOrdinalVersions,
+  ] = useState<
+    OrdinalBlockVersion[]
+  >([]);
+
+  const [
+    selectedOrdinalVersionIndex,
+    setSelectedOrdinalVersionIndex,
+  ] = useState<number | null>(
+    null,
+  );
+
+  const [
+    isOrdinalHistoryLoading,
+    setIsOrdinalHistoryLoading,
+  ] = useState(false);
+
+  const [
+    ordinalHistoryError,
+    setOrdinalHistoryError,
+  ] = useState<string | null>(
+    null,
+  );
+
+  const [
+    versionCreatorUsername,
+    setVersionCreatorUsername,
+  ] = useState<string | null>(
+    null,
+  );
+
   const currentWalletAddress =
     walletState.paymentAddress
       ?.address ?? null;
@@ -168,6 +214,48 @@ export default function BlockInspector({
         boardBlocks,
       ],
     );
+
+  const selectedOrdinalVersion =
+    useMemo(
+      () =>
+        selectedOrdinalVersionIndex ===
+        null
+          ? null
+          : ordinalVersions[
+              selectedOrdinalVersionIndex
+            ] ?? null,
+      [
+        ordinalVersions,
+        selectedOrdinalVersionIndex,
+      ],
+    );
+
+  const latestOrdinalVersionIndex =
+    ordinalVersions.length - 1;
+
+  const hasConfirmedInscription =
+    Boolean(
+      occupiedBlock &&
+        occupiedBlock
+          .latestInscriptionVersion >
+          0,
+    );
+
+  const isViewingHistoricalVersion =
+    Boolean(
+      occupiedBlock &&
+        selectedOrdinalVersion &&
+        selectedOrdinalVersion.version <
+          occupiedBlock
+            .latestInscriptionVersion,
+    );
+
+  const isViewingLatestVersion =
+    !selectedOrdinalVersion ||
+    !occupiedBlock ||
+    selectedOrdinalVersion.version ===
+      occupiedBlock
+        .latestInscriptionVersion;
 
   useEffect(() => {
     let isActive = true;
@@ -201,7 +289,8 @@ export default function BlockInspector({
       }
 
       setOwnerUsername(
-        customEvent.detail.username,
+        customEvent.detail
+          .username,
       );
     };
 
@@ -246,8 +335,183 @@ export default function BlockInspector({
       ?.ownerWalletAddress,
   ]);
 
+  useEffect(() => {
+    clearOrdinalPreview();
+
+    setOrdinalVersions([]);
+    setSelectedOrdinalVersionIndex(
+      null,
+    );
+    setOrdinalHistoryError(
+      null,
+    );
+    setVersionCreatorUsername(
+      null,
+    );
+
+    if (
+      !occupiedBlock ||
+      occupiedBlock
+        .latestInscriptionVersion <
+        1 ||
+      occupiedBlock
+        .inscriptionPending
+    ) {
+      setIsOrdinalHistoryLoading(
+        false,
+      );
+
+      return;
+    }
+
+    let isActive = true;
+
+    setIsOrdinalHistoryLoading(
+      true,
+    );
+
+    void loadOrdinalBlockHistory(
+      block,
+    )
+      .then((versions) => {
+        if (!isActive) {
+          return;
+        }
+
+        setOrdinalVersions(
+          versions,
+        );
+
+        setSelectedOrdinalVersionIndex(
+          versions.length > 0
+            ? versions.length - 1
+            : null,
+        );
+      })
+      .catch((error) => {
+        if (!isActive) {
+          return;
+        }
+
+        setOrdinalHistoryError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load Ordinal history.",
+        );
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsOrdinalHistoryLoading(
+            false,
+          );
+        }
+      });
+
+    return () => {
+      isActive = false;
+
+      clearOrdinalPreview();
+    };
+  }, [
+    block.column,
+    block.row,
+    occupiedBlock
+      ?.inscriptionPending,
+    occupiedBlock
+      ?.latestInscriptionVersion,
+  ]);
+
+  useEffect(() => {
+    if (
+      !occupiedBlock ||
+      !selectedOrdinalVersion ||
+      selectedOrdinalVersion.version ===
+        occupiedBlock
+          .latestInscriptionVersion
+    ) {
+      clearOrdinalPreview();
+
+      return;
+    }
+
+    setOrdinalPreview({
+      block: {
+        ...block,
+      },
+
+      version:
+        selectedOrdinalVersion.version,
+
+      pixels:
+        selectedOrdinalVersion.pixels,
+    });
+
+    return () => {
+      clearOrdinalPreview();
+    };
+  }, [
+    block.column,
+    block.row,
+    occupiedBlock,
+    selectedOrdinalVersion,
+  ]);
+
+  useEffect(() => {
+    const creatorPaymentAddress =
+      selectedOrdinalVersion
+        ?.ownerPaymentAddress;
+
+    if (!creatorPaymentAddress) {
+      setVersionCreatorUsername(
+        null,
+      );
+
+      return;
+    }
+
+    let isActive = true;
+
+    setVersionCreatorUsername(
+      null,
+    );
+
+    void loadPublicWalletProfile(
+      creatorPaymentAddress,
+    )
+      .then((profile) => {
+        if (!isActive) {
+          return;
+        }
+
+        setVersionCreatorUsername(
+          profile.username,
+        );
+      })
+      .catch((error) => {
+        console.warn(
+          "Unable to load Ordinal creator profile:",
+          error,
+        );
+
+        if (isActive) {
+          setVersionCreatorUsername(
+            null,
+          );
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [
+    selectedOrdinalVersion
+      ?.ownerPaymentAddress,
+  ]);
+
   const publicBlockNumber =
-    getPublicBlockNumber(block);
+    getPublicBlockNumber(
+      block,
+    );
 
   const selectedBlockCount =
     claimState.blocks.length;
@@ -263,6 +527,7 @@ export default function BlockInspector({
 
   const handleCancelClaimMode =
     () => {
+      clearOrdinalPreview();
       cancelClaim();
       setSelectedBlock(null);
     };
@@ -364,6 +629,8 @@ export default function BlockInspector({
         return;
       }
 
+      clearOrdinalPreview();
+
       startEditorForExistingBlock(
         block,
       );
@@ -378,10 +645,13 @@ export default function BlockInspector({
           .inscriptionPending ||
         occupiedBlock
           .latestInscriptionVersion <
-          1
+          1 ||
+        !isViewingLatestVersion
       ) {
         return;
       }
+
+      clearOrdinalPreview();
 
       startEditorForNewOrdinalVersion(
         block,
@@ -389,42 +659,80 @@ export default function BlockInspector({
     };
 
   const handleMintOrdinal =
-  () => {
-    if (
-      !occupiedBlock ||
-      !isOwnedByCurrentUser ||
-      occupiedBlock
-        .inscriptionPending ||
-      occupiedBlock
-        .latestInscriptionVersion >
-        0
-    ) {
-      return;
-    }
+    () => {
+      if (
+        !occupiedBlock ||
+        !isOwnedByCurrentUser ||
+        occupiedBlock
+          .inscriptionPending ||
+        occupiedBlock
+          .latestInscriptionVersion >
+          0
+      ) {
+        return;
+      }
 
-    openFirstOrdinalMintModal({
-      block: {
-        ...block,
-      },
+      clearOrdinalPreview();
 
-      pixels: [
-        ...occupiedBlock.pixels,
-      ],
+      openFirstOrdinalMintModal({
+        block: {
+          ...block,
+        },
 
-      description:
-        occupiedBlock.description ??
-        "",
-    });
-  };
+        pixels: [
+          ...occupiedBlock.pixels,
+        ],
+
+        description:
+          occupiedBlock.description ??
+          "",
+      });
+    };
+
+  const handlePreviousVersion =
+    () => {
+      setSelectedOrdinalVersionIndex(
+        (currentIndex) => {
+          if (
+            currentIndex === null
+          ) {
+            return null;
+          }
+
+          return Math.max(
+            currentIndex - 1,
+            0,
+          );
+        },
+      );
+    };
+
+  const handleNextVersion =
+    () => {
+      setSelectedOrdinalVersionIndex(
+        (currentIndex) => {
+          if (
+            currentIndex === null
+          ) {
+            return null;
+          }
+
+          return Math.min(
+            currentIndex + 1,
+            latestOrdinalVersionIndex,
+          );
+        },
+      );
+    };
 
   if (occupiedBlock) {
-    const hasConfirmedInscription =
-      occupiedBlock
-        .latestInscriptionVersion >
-      0;
+    const displayedDescription =
+      selectedOrdinalVersion
+        ?.description ??
+      occupiedBlock.description;
 
     return (
-      <aside className="pointer-events-auto absolute bottom-8 left-1/2 w-80 -translate-x-1/2 rounded-xl bg-white p-4 shadow-lg">
+      <aside className="pointer-events-auto absolute bottom-8 left-1/2 max-h-[calc(100vh-4rem)] w-80 -translate-x-1/2 overflow-y-auto rounded-xl bg-white p-4 shadow-lg">
         <p className="text-sm font-semibold">
           Block #{publicBlockNumber}
         </p>
@@ -436,7 +744,7 @@ export default function BlockInspector({
         <dl className="mt-4 space-y-3 text-sm">
           <div>
             <dt className="text-gray-500">
-              Owned by
+              Current owner
             </dt>
 
             <dd className="mt-1">
@@ -465,21 +773,20 @@ export default function BlockInspector({
             </dd>
           </div>
 
-          {occupiedBlock
-            .description && (
-            <div>
-              <dt className="text-gray-500">
-                Description
-              </dt>
+          {!hasConfirmedInscription &&
+            displayedDescription && (
+              <div>
+                <dt className="text-gray-500">
+                  Description
+                </dt>
 
-              <dd className="mt-1">
-                {
-                  occupiedBlock
-                    .description
-                }
-              </dd>
-            </div>
-          )}
+                <dd className="mt-1">
+                  {
+                    displayedDescription
+                  }
+                </dd>
+              </div>
+            )}
 
           <div>
             <dt className="text-gray-500">
@@ -496,7 +803,7 @@ export default function BlockInspector({
 
           <div>
             <dt className="text-gray-500">
-              Transaction
+              Claim transaction
             </dt>
 
             <dd className="mt-1 break-all font-mono text-xs">
@@ -523,48 +830,237 @@ export default function BlockInspector({
           {hasConfirmedInscription && (
             <div>
               <dt className="text-gray-500">
-                Ordinal
+                Ordinal history
               </dt>
 
-              <dd className="mt-1">
-                <span className="block font-medium">
-                  Version{" "}
-                  {
-                    occupiedBlock
-                      .latestInscriptionVersion
-                  }
-                </span>
-
-                {occupiedBlock
-                  .latestInscriptionId && (
-                  <span
-                    title={
-                      occupiedBlock
-                        .latestInscriptionId
-                    }
-                    className="mt-0.5 block font-mono text-xs text-gray-500"
+              <dd className="mt-2">
+                {isOrdinalHistoryLoading ? (
+                  <p className="text-xs text-gray-500">
+                    Loading versions...
+                  </p>
+                ) : ordinalHistoryError ? (
+                  <p
+                    role="alert"
+                    className="text-xs text-red-600"
                   >
-                    {formatInscriptionId(
-                      occupiedBlock
-                        .latestInscriptionId,
-                    )}
-                  </span>
-                )}
+                    {
+                      ordinalHistoryError
+                    }
+                  </p>
+                ) : selectedOrdinalVersion ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={
+                        handlePreviousVersion
+                      }
+                      disabled={
+                        selectedOrdinalVersionIndex ===
+                        null ||
+                        selectedOrdinalVersionIndex <=
+                          0
+                      }
+                      aria-label="Previous Ordinal version"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-300 font-medium disabled:cursor-default disabled:opacity-30"
+                    >
+                      ←
+                    </button>
 
-                {occupiedBlock
-                  .latestInscribedAt && (
-                  <span className="mt-0.5 block text-xs text-gray-500">
-                    Inscribed{" "}
-                    {formatDate(
-                      occupiedBlock
-                        .latestInscribedAt,
-                    )}
-                  </span>
+                    <span className="min-w-0 flex-1 text-center font-semibold">
+                      Version{" "}
+                      {
+                        selectedOrdinalVersion.version
+                      }{" "}
+                      of{" "}
+                      {
+                        occupiedBlock.latestInscriptionVersion
+                      }
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={
+                        handleNextVersion
+                      }
+                      disabled={
+                        selectedOrdinalVersionIndex ===
+                        null ||
+                        selectedOrdinalVersionIndex >=
+                          latestOrdinalVersionIndex
+                      }
+                      aria-label="Next Ordinal version"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-300 font-medium disabled:cursor-default disabled:opacity-30"
+                    >
+                      →
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">
+                    No confirmed version
+                    found.
+                  </p>
                 )}
               </dd>
             </div>
           )}
+
+          {selectedOrdinalVersion && (
+            <>
+              {displayedDescription && (
+                <div>
+                  <dt className="text-gray-500">
+                    Description
+                  </dt>
+
+                  <dd className="mt-1">
+                    {
+                      displayedDescription
+                    }
+                  </dd>
+                </div>
+              )}
+
+              <div>
+                <dt className="text-gray-500">
+                  Created by
+                </dt>
+
+                <dd className="mt-1">
+                  {versionCreatorUsername && (
+                    <span className="block font-medium">
+                      {
+                        versionCreatorUsername
+                      }
+                    </span>
+                  )}
+
+                  <span
+                    title={
+                      selectedOrdinalVersion
+                        .ownerPaymentAddress
+                    }
+                    className={
+                      versionCreatorUsername
+                        ? "mt-0.5 block font-mono text-xs text-gray-500"
+                        : "block font-mono text-xs"
+                    }
+                  >
+                    {formatWalletAddress(
+                      selectedOrdinalVersion
+                        .ownerPaymentAddress,
+                    )}
+                  </span>
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-gray-500">
+                  Inscribed to
+                </dt>
+
+                <dd
+                  title={
+                    selectedOrdinalVersion
+                      .destinationOrdinalsAddress
+                  }
+                  className="mt-1 font-mono text-xs"
+                >
+                  {formatWalletAddress(
+                    selectedOrdinalVersion
+                      .destinationOrdinalsAddress,
+                  )}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-gray-500">
+                  Inscribed
+                </dt>
+
+                <dd className="mt-1">
+                  {formatDate(
+                    selectedOrdinalVersion
+                      .confirmedAt,
+                  )}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-gray-500">
+                  Inscription ID
+                </dt>
+
+                <dd
+                  title={
+                    selectedOrdinalVersion
+                      .inscriptionId
+                  }
+                  className="mt-1 font-mono text-xs"
+                >
+                  {formatInscriptionId(
+                    selectedOrdinalVersion
+                      .inscriptionId,
+                  )}
+                </dd>
+              </div>
+            </>
+          )}
+
+          {hasConfirmedInscription &&
+            !selectedOrdinalVersion &&
+            !isOrdinalHistoryLoading && (
+              <div>
+                <dt className="text-gray-500">
+                  Latest Ordinal
+                </dt>
+
+                <dd className="mt-1">
+                  <span className="block font-medium">
+                    Version{" "}
+                    {
+                      occupiedBlock
+                        .latestInscriptionVersion
+                    }
+                  </span>
+
+                  {occupiedBlock
+                    .latestInscriptionId && (
+                    <span
+                      title={
+                        occupiedBlock
+                          .latestInscriptionId
+                      }
+                      className="mt-0.5 block font-mono text-xs text-gray-500"
+                    >
+                      {formatInscriptionId(
+                        occupiedBlock
+                          .latestInscriptionId,
+                      )}
+                    </span>
+                  )}
+                </dd>
+              </div>
+            )}
         </dl>
+
+        {isViewingHistoricalVersion && (
+          <div className="mt-5 rounded-lg bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-900">
+            <span className="block font-semibold">
+              Viewing historical
+              version
+            </span>
+
+            <span className="mt-0.5 block">
+              The Board currently uses
+              Ordinal v
+              {
+                occupiedBlock
+                  .latestInscriptionVersion
+              }
+              .
+            </span>
+          </div>
+        )}
 
         {isOwnedByCurrentUser &&
           !occupiedBlock
@@ -576,8 +1072,7 @@ export default function BlockInspector({
                 onClick={
                   handleEditBlock
                 }
-                disabled={false}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium disabled:opacity-40"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium"
               >
                 Edit Block
               </button>
@@ -587,8 +1082,7 @@ export default function BlockInspector({
                 onClick={
                   handleMintOrdinal
                 }
-                disabled={false}
-                className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white"
               >
                 Mint Ordinal
               </button>
@@ -598,7 +1092,8 @@ export default function BlockInspector({
         {isOwnedByCurrentUser &&
           hasConfirmedInscription &&
           !occupiedBlock
-            .inscriptionPending && (
+            .inscriptionPending &&
+          isViewingLatestVersion && (
             <div className="mt-5">
               <button
                 type="button"
@@ -620,7 +1115,6 @@ export default function BlockInspector({
               </p>
             </div>
           )}
-
       </aside>
     );
   }

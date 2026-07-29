@@ -7,14 +7,34 @@ import {
   getClaimState,
   isBlockClaimed,
 } from "../claim/claimState";
-import { getEditorState } from "../editor/editorState";
-import { getHoveredPixel } from "../editor/editorHoverState";
-import { hoverState } from "../hover/hoverState";
 
-import { PIXELS_PER_BLOCK } from "./boardTypes";
+import {
+  getEditorState,
+} from "../editor/editorState";
 
-import type { CameraState } from "../camera/cameraTypes";
-import type { BoardState } from "./boardTypes";
+import {
+  getHoveredPixel,
+} from "../editor/editorHoverState";
+
+import {
+  hoverState,
+} from "../hover/hoverState";
+
+import {
+  getOrdinalPreviewState,
+} from "../ordinals/ordinalPreviewState";
+
+import {
+  PIXELS_PER_BLOCK,
+} from "./boardTypes";
+
+import type {
+  CameraState,
+} from "../camera/cameraTypes";
+
+import type {
+  BoardState,
+} from "./boardTypes";
 
 interface ViewportSize {
   width: number;
@@ -31,19 +51,27 @@ let pixelTextureCanvas:
   HTMLCanvasElement | null = null;
 
 let pixelTextureContext:
-  CanvasRenderingContext2D | null = null;
+  CanvasRenderingContext2D | null =
+    null;
 
 let pixelTextureWidth = 0;
 let pixelTextureHeight = 0;
 
 const pixelTextureEntries =
-  new Map<string, PixelTextureEntry>();
+  new Map<
+    string,
+    PixelTextureEntry
+  >();
 
 function renderBackground(
-  context: CanvasRenderingContext2D,
-  boardState: BoardState,
+  context:
+    CanvasRenderingContext2D,
+
+  boardState:
+    BoardState,
 ) {
-  context.fillStyle = "#ffffff";
+  context.fillStyle =
+    "#ffffff";
 
   context.fillRect(
     0,
@@ -54,7 +82,8 @@ function renderBackground(
 }
 
 function getPixelTexture(
-  boardState: BoardState,
+  boardState:
+    BoardState,
 ) {
   const rowCount =
     boardState.height /
@@ -75,25 +104,37 @@ function getPixelTexture(
   const needsNewTexture =
     !pixelTextureCanvas ||
     !pixelTextureContext ||
-    pixelTextureWidth !== requiredWidth ||
-    pixelTextureHeight !== requiredHeight;
+    pixelTextureWidth !==
+      requiredWidth ||
+    pixelTextureHeight !==
+      requiredHeight;
 
   if (needsNewTexture) {
     const canvas =
-      document.createElement("canvas");
+      document.createElement(
+        "canvas",
+      );
 
-    canvas.width = requiredWidth;
-    canvas.height = requiredHeight;
+    canvas.width =
+      requiredWidth;
+
+    canvas.height =
+      requiredHeight;
 
     const context =
-      canvas.getContext("2d");
+      canvas.getContext(
+        "2d",
+      );
 
     if (!context) {
       return null;
     }
 
-    pixelTextureCanvas = canvas;
-    pixelTextureContext = context;
+    pixelTextureCanvas =
+      canvas;
+
+    pixelTextureContext =
+      context;
 
     pixelTextureWidth =
       requiredWidth;
@@ -104,10 +145,16 @@ function getPixelTexture(
     pixelTextureEntries.clear();
   }
 
-  const canvas = pixelTextureCanvas;
-  const context = pixelTextureContext;
+  const canvas =
+    pixelTextureCanvas;
 
-  if (!canvas || !context) {
+  const context =
+    pixelTextureContext;
+
+  if (
+    !canvas ||
+    !context
+  ) {
     return null;
   }
 
@@ -118,10 +165,13 @@ function getPixelTexture(
 }
 
 function updatePixelTexture(
-  boardState: BoardState,
+  boardState:
+    BoardState,
 ) {
   const texture =
-    getPixelTexture(boardState);
+    getPixelTexture(
+      boardState,
+    );
 
   if (!texture) {
     return null;
@@ -130,15 +180,23 @@ function updatePixelTexture(
   const editorState =
     getEditorState();
 
+  const ordinalPreview =
+    getOrdinalPreviewState();
+
   const activeBlockKeys =
     new Set<string>();
 
   /*
-   * On parcourt uniquement les Blocks occupés,
-   * et non les 4 096 emplacements du Board.
+   * On parcourt uniquement
+   * les Blocks occupés.
    */
-  for (const block of getBlocks()) {
-    const { row, column } =
+  for (
+    const block of getBlocks()
+  ) {
+    const {
+      row,
+      column,
+    } =
       block.coordinate;
 
     const blockKey =
@@ -146,7 +204,9 @@ function updatePixelTexture(
         block.coordinate,
       );
 
-    activeBlockKeys.add(blockKey);
+    activeBlockKeys.add(
+      blockKey,
+    );
 
     const editorDraft =
       editorState.isActive
@@ -155,8 +215,26 @@ function updatePixelTexture(
           )
         : undefined;
 
+    const isPreviewedBlock =
+      ordinalPreview.block
+        ?.row === row &&
+      ordinalPreview.block
+        ?.column === column;
+
+    const previewPixels =
+      isPreviewedBlock
+        ? ordinalPreview.pixels
+        : null;
+
+    /*
+     * L’éditeur reste prioritaire.
+     * Sinon, une version historique
+     * peut remplacer temporairement
+     * les Pixels actuels.
+     */
     const pixels =
       editorDraft?.pixels ??
+      previewPixels ??
       block.pixels;
 
     const existingEntry =
@@ -165,12 +243,13 @@ function updatePixelTexture(
       );
 
     /*
-     * Si le tableau de Pixels n’a pas changé,
-     * la partie correspondante de la texture
+     * Si le tableau de Pixels
+     * n’a pas changé, la texture
      * est déjà à jour.
      */
     if (
-      existingEntry?.pixels === pixels
+      existingEntry?.pixels ===
+      pixels
     ) {
       continue;
     }
@@ -211,8 +290,10 @@ function updatePixelTexture(
         texture.context.fillRect(
           textureX +
             pixelColumn,
+
           textureY +
             pixelRow,
+
           1,
           1,
         );
@@ -230,11 +311,15 @@ function updatePixelTexture(
   }
 
   /*
-   * Si un Block est supprimé du store,
-   * on efface également sa zone de la texture.
+   * Si un Block est supprimé,
+   * sa zone est également effacée
+   * de la texture globale.
    */
   pixelTextureEntries.forEach(
-    (entry, blockKey) => {
+    (
+      entry,
+      blockKey,
+    ) => {
       if (
         activeBlockKeys.has(
           blockKey,
@@ -246,8 +331,10 @@ function updatePixelTexture(
       texture.context.clearRect(
         entry.column *
           PIXELS_PER_BLOCK,
+
         entry.row *
           PIXELS_PER_BLOCK,
+
         PIXELS_PER_BLOCK,
         PIXELS_PER_BLOCK,
       );
@@ -262,11 +349,16 @@ function updatePixelTexture(
 }
 
 function renderPixels(
-  context: CanvasRenderingContext2D,
-  boardState: BoardState,
+  context:
+    CanvasRenderingContext2D,
+
+  boardState:
+    BoardState,
 ) {
   const textureCanvas =
-    updatePixelTexture(boardState);
+    updatePixelTexture(
+      boardState,
+    );
 
   if (!textureCanvas) {
     return;
@@ -277,8 +369,11 @@ function renderPixels(
 
   context.save();
 
-  if (claimState.isActive) {
-    context.globalAlpha = 0.45;
+  if (
+    claimState.isActive
+  ) {
+    context.globalAlpha =
+      0.45;
   }
 
   context.imageSmoothingEnabled =
@@ -286,12 +381,16 @@ function renderPixels(
 
   context.drawImage(
     textureCanvas,
+
     0,
     0,
+
     textureCanvas.width,
     textureCanvas.height,
+
     0,
     0,
+
     boardState.width,
     boardState.height,
   );
@@ -300,13 +399,18 @@ function renderPixels(
 }
 
 function renderClaimSelection(
-  context: CanvasRenderingContext2D,
-  boardState: BoardState,
+  context:
+    CanvasRenderingContext2D,
+
+  boardState:
+    BoardState,
 ) {
   const claimState =
     getClaimState();
 
-  if (!claimState.isActive) {
+  if (
+    !claimState.isActive
+  ) {
     return;
   }
 
@@ -327,12 +431,15 @@ function renderClaimSelection(
         boardState.blockSize;
 
       const publicBlockNumber =
-        block.row * columnCount +
+        block.row *
+          columnCount +
         block.column +
         1;
 
       const label =
-        String(publicBlockNumber);
+        String(
+          publicBlockNumber,
+        );
 
       const fontSize =
         label.length >= 4
@@ -365,10 +472,14 @@ function renderClaimSelection(
 
       context.fillText(
         label,
+
         blockX +
-          boardState.blockSize / 2,
+          boardState.blockSize /
+            2,
+
         blockY +
-          boardState.blockSize / 2,
+          boardState.blockSize /
+            2,
       );
     },
   );
@@ -377,8 +488,11 @@ function renderClaimSelection(
 }
 
 function renderHover(
-  context: CanvasRenderingContext2D,
-  boardState: BoardState,
+  context:
+    CanvasRenderingContext2D,
+
+  boardState:
+    BoardState,
 ) {
   const editorState =
     getEditorState();
@@ -391,7 +505,8 @@ function renderHover(
   }
 
   if (
-    getClaimState().isActive &&
+    getClaimState()
+      .isActive &&
     isBlockClaimed(
       hoverState.block,
     )
@@ -401,14 +516,19 @@ function renderHover(
 
   context.save();
 
-  context.globalAlpha = 0.35;
-  context.fillStyle = "#d1d5db";
+  context.globalAlpha =
+    0.35;
+
+  context.fillStyle =
+    "#d1d5db";
 
   context.fillRect(
     hoverState.block.column *
       boardState.blockSize,
+
     hoverState.block.row *
       boardState.blockSize,
+
     boardState.blockSize,
     boardState.blockSize,
   );
@@ -417,8 +537,11 @@ function renderHover(
 }
 
 function renderEditorOverlay(
-  context: CanvasRenderingContext2D,
-  boardState: BoardState,
+  context:
+    CanvasRenderingContext2D,
+
+  boardState:
+    BoardState,
 ) {
   const editorState =
     getEditorState();
@@ -435,7 +558,8 @@ function renderEditorOverlay(
 
   const currentBlock =
     editorState.blocks[
-      editorState.currentBlockIndex
+      editorState
+        .currentBlockIndex
     ];
 
   if (!currentBlock) {
@@ -470,17 +594,22 @@ function renderEditorOverlay(
     strokeWidth / 2;
 
   const innerSize =
-    pixelSize - strokeWidth;
+    pixelSize -
+    strokeWidth;
 
-  if (innerSize <= 0) {
+  if (
+    innerSize <= 0
+  ) {
     return;
   }
 
   const hoverColor =
     editorState.selectedColor
-      .toLowerCase() === "#ffffff"
+      .toLowerCase() ===
+    "#ffffff"
       ? "#e5e7eb"
-      : editorState.selectedColor;
+      : editorState
+          .selectedColor;
 
   context.save();
 
@@ -491,8 +620,12 @@ function renderEditorOverlay(
     strokeWidth;
 
   context.strokeRect(
-    pixelX + inset,
-    pixelY + inset,
+    pixelX +
+      inset,
+
+    pixelY +
+      inset,
+
     innerSize,
     innerSize,
   );
@@ -501,10 +634,17 @@ function renderEditorOverlay(
 }
 
 export function renderBoard(
-  context: CanvasRenderingContext2D,
-  boardState: BoardState,
-  cameraState: CameraState,
-  viewportSize: ViewportSize,
+  context:
+    CanvasRenderingContext2D,
+
+  boardState:
+    BoardState,
+
+  cameraState:
+    CameraState,
+
+  viewportSize:
+    ViewportSize,
 ) {
   context.clearRect(
     0,
@@ -516,9 +656,12 @@ export function renderBoard(
   context.save();
 
   context.translate(
-    viewportSize.width / 2 +
+    viewportSize.width /
+      2 +
       cameraState.x,
-    viewportSize.height / 2 +
+
+    viewportSize.height /
+      2 +
       cameraState.y,
   );
 
@@ -528,8 +671,11 @@ export function renderBoard(
   );
 
   context.translate(
-    -boardState.width / 2,
-    -boardState.height / 2,
+    -boardState.width /
+      2,
+
+    -boardState.height /
+      2,
   );
 
   renderBackground(
