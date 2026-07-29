@@ -1,4 +1,6 @@
-import { NextResponse } from "next/server";
+import {
+  NextResponse,
+} from "next/server";
 
 import {
   getServerWalletSession,
@@ -41,8 +43,11 @@ function isNonEmptyString(
   );
 }
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const runtime =
+  "nodejs";
+
+export const dynamic =
+  "force-dynamic";
 
 export async function POST(
   request: Request,
@@ -54,6 +59,7 @@ export async function POST(
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "A verified wallet session is required.",
       },
@@ -72,6 +78,7 @@ export async function POST(
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "The request body is invalid.",
       },
@@ -89,6 +96,7 @@ export async function POST(
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "The order ID is required.",
       },
@@ -166,8 +174,11 @@ export async function POST(
         row.owner_payment_address !==
           session.paymentAddress ||
         !row.claimed_at ||
+        !row.updated_at ||
         !row.claim_transaction_id ||
-        !Array.isArray(row.pixels) ||
+        !Array.isArray(
+          row.pixels,
+        ) ||
         row.pixels.length !==
           expectedPixelCount,
     );
@@ -179,6 +190,7 @@ export async function POST(
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "The confirmed Blocks returned invalid data.",
       },
@@ -192,7 +204,8 @@ export async function POST(
     rows.map((row) => ({
       coordinate: {
         row: row.block_row,
-        column: row.block_column,
+        column:
+          row.block_column,
       },
 
       ownerWalletAddress:
@@ -213,6 +226,18 @@ export async function POST(
 
       claimTransactionId:
         row.claim_transaction_id,
+
+      latestInscriptionVersion:
+        0,
+
+      latestInscriptionId:
+        null,
+
+      latestInscribedAt:
+        null,
+
+      inscriptionPending:
+        false,
     }));
 
   return NextResponse.json(

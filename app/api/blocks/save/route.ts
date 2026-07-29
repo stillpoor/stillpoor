@@ -1,4 +1,6 @@
-import { NextResponse } from "next/server";
+import {
+  NextResponse,
+} from "next/server";
 
 import {
   getServerWalletSession,
@@ -68,15 +70,22 @@ function isBlockCoordinate(
     boardConfig.blockSize;
 
   return (
-    typeof coordinate.row === "number" &&
-    Number.isInteger(coordinate.row) &&
+    typeof coordinate.row ===
+      "number" &&
+    Number.isInteger(
+      coordinate.row,
+    ) &&
     coordinate.row >= 0 &&
     coordinate.row < rowCount &&
 
-    typeof coordinate.column === "number" &&
-    Number.isInteger(coordinate.column) &&
+    typeof coordinate.column ===
+      "number" &&
+    Number.isInteger(
+      coordinate.column,
+    ) &&
     coordinate.column >= 0 &&
-    coordinate.column < columnCount
+    coordinate.column <
+      columnCount
   );
 }
 
@@ -85,7 +94,9 @@ function isValidPixelColour(
 ): value is string {
   return (
     typeof value === "string" &&
-    /^#[0-9a-fA-F]{6}$/.test(value)
+    /^#[0-9a-fA-F]{6}$/.test(
+      value,
+    )
   );
 }
 
@@ -97,14 +108,18 @@ function getPublicBlockNumber(
     boardConfig.blockSize;
 
   return (
-    coordinate.row * blocksPerRow +
+    coordinate.row *
+      blocksPerRow +
     coordinate.column +
     1
   );
 }
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const runtime =
+  "nodejs";
+
+export const dynamic =
+  "force-dynamic";
 
 export async function POST(
   request: Request,
@@ -116,6 +131,7 @@ export async function POST(
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "A verified wallet session is required.",
       },
@@ -134,6 +150,7 @@ export async function POST(
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "The request body is invalid.",
       },
@@ -144,13 +161,16 @@ export async function POST(
   }
 
   if (
-    !Array.isArray(body.blocks) ||
+    !Array.isArray(
+      body.blocks,
+    ) ||
     body.blocks.length === 0 ||
     body.blocks.length > 100
   ) {
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "Between 1 and 100 Blocks must be provided.",
       },
@@ -166,14 +186,19 @@ export async function POST(
 
   const validatedBlocks = [];
 
-  for (const rawBlock of body.blocks) {
+  for (
+    const rawBlock of
+    body.blocks
+  ) {
     if (
       !rawBlock ||
-      typeof rawBlock !== "object"
+      typeof rawBlock !==
+        "object"
     ) {
       return NextResponse.json(
         {
           ok: false,
+
           error:
             "One or more Blocks are invalid.",
         },
@@ -190,7 +215,9 @@ export async function POST(
       !isBlockCoordinate(
         block.coordinate,
       ) ||
-      !Array.isArray(block.pixels) ||
+      !Array.isArray(
+        block.pixels,
+      ) ||
       block.pixels.length !==
         expectedPixelCount ||
       !block.pixels.every(
@@ -200,6 +227,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
+
           error:
             "One or more Blocks contain invalid coordinates or Pixels.",
         },
@@ -210,14 +238,17 @@ export async function POST(
     }
 
     if (
-      block.description !== null &&
-      block.description !== undefined &&
+      block.description !==
+        null &&
+      block.description !==
+        undefined &&
       typeof block.description !==
         "string"
     ) {
       return NextResponse.json(
         {
           ok: false,
+
           error:
             "A Block description must be text.",
         },
@@ -229,14 +260,17 @@ export async function POST(
 
     const description =
       typeof block.description ===
-      "string"
+        "string"
         ? block.description
         : "";
 
-    if (description.length > 300) {
+    if (
+      description.length > 300
+    ) {
       return NextResponse.json(
         {
           ok: false,
+
           error:
             "A Block description cannot exceed 300 characters.",
         },
@@ -270,11 +304,12 @@ export async function POST(
 
   if (
     uniqueBlockNumbers.size !==
-    validatedBlocks.length
+      validatedBlocks.length
   ) {
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "The Blocks payload contains duplicates.",
       },
@@ -303,12 +338,18 @@ export async function POST(
       error.message ||
       "Unable to save the Blocks.";
 
+    const lowerErrorMessage =
+      errorMessage.toLowerCase();
+
     const isOwnershipError =
-      errorMessage
-        .toLowerCase()
-        .includes(
-          "not owned",
-        );
+      lowerErrorMessage.includes(
+        "not owned",
+      );
+
+    const isOrdinalLockError =
+      lowerErrorMessage.includes(
+        "locked by an ordinal inscription",
+      );
 
     return NextResponse.json(
       {
@@ -319,7 +360,9 @@ export async function POST(
         status:
           isOwnershipError
             ? 403
-            : 400,
+            : isOrdinalLockError
+              ? 409
+              : 400,
       },
     );
   }
@@ -332,7 +375,9 @@ export async function POST(
       (row) =>
         row.owner_payment_address !==
           session.paymentAddress ||
-        !Array.isArray(row.pixels) ||
+        !Array.isArray(
+          row.pixels,
+        ) ||
         row.pixels.length !==
           expectedPixelCount ||
         !row.claimed_at ||
@@ -348,6 +393,7 @@ export async function POST(
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "Supabase returned an invalid or incomplete save result.",
       },
@@ -361,7 +407,8 @@ export async function POST(
     rows.map((row) => ({
       coordinate: {
         row: row.block_row,
-        column: row.block_column,
+        column:
+          row.block_column,
       },
 
       ownerWalletAddress:
@@ -382,6 +429,18 @@ export async function POST(
 
       claimTransactionId:
         row.claim_transaction_id,
+
+      latestInscriptionVersion:
+        0,
+
+      latestInscriptionId:
+        null,
+
+      latestInscribedAt:
+        null,
+
+      inscriptionPending:
+        false,
     }));
 
   return NextResponse.json(

@@ -1,4 +1,6 @@
-import { supabaseBrowser } from "../supabase/browserClient";
+import {
+  supabaseBrowser,
+} from "../supabase/browserClient";
 
 import {
   PIXELS_PER_BLOCK,
@@ -13,7 +15,8 @@ interface ClaimedBlockRow {
   block_row: number;
   block_column: number;
 
-  owner_payment_address: string | null;
+  owner_payment_address:
+    string | null;
 
   pixels: string[] | null;
   description: string | null;
@@ -21,7 +24,20 @@ interface ClaimedBlockRow {
   claimed_at: string | null;
   updated_at: string;
 
-  claim_transaction_id: string | null;
+  claim_transaction_id:
+    string | null;
+
+  latest_inscription_version:
+    number;
+
+  latest_inscription_id:
+    string | null;
+
+  latest_inscribed_at:
+    string | null;
+
+  inscription_pending:
+    boolean;
 }
 
 export async function loadClaimedBlocks(): Promise<
@@ -40,9 +56,16 @@ export async function loadClaimedBlocks(): Promise<
       description,
       claimed_at,
       updated_at,
-      claim_transaction_id
+      claim_transaction_id,
+      latest_inscription_version,
+      latest_inscription_id,
+      latest_inscribed_at,
+      inscription_pending
     `)
-    .eq("status", "claimed");
+    .eq(
+      "status",
+      "claimed",
+    );
 
   if (error) {
     throw new Error(
@@ -58,13 +81,44 @@ export async function loadClaimedBlocks(): Promise<
       PIXELS_PER_BLOCK *
       PIXELS_PER_BLOCK;
 
+    const hasInvalidInscriptionVersion =
+      !Number.isInteger(
+        row.latest_inscription_version,
+      ) ||
+      row.latest_inscription_version < 0;
+
+    const hasInvalidInscriptionMetadata =
+      (
+        row.latest_inscription_version ===
+          0 &&
+        (
+          row.latest_inscription_id !==
+            null ||
+          row.latest_inscribed_at !==
+            null
+        )
+      ) ||
+      (
+        row.latest_inscription_version >
+          0 &&
+        (
+          !row.latest_inscription_id ||
+          !row.latest_inscribed_at
+        )
+      );
+
     if (
       !row.owner_payment_address ||
       !row.pixels ||
       row.pixels.length !==
         expectedPixelCount ||
       !row.claimed_at ||
-      !row.claim_transaction_id
+      !row.updated_at ||
+      !row.claim_transaction_id ||
+      hasInvalidInscriptionVersion ||
+      hasInvalidInscriptionMetadata ||
+      typeof row.inscription_pending !==
+        "boolean"
     ) {
       throw new Error(
         `Invalid claimed Block at ${row.block_row}:${row.block_column}.`,
@@ -84,13 +138,29 @@ export async function loadClaimedBlocks(): Promise<
         ...row.pixels,
       ] as PixelColor[],
 
-      description: row.description,
+      description:
+        row.description,
 
-      claimedAt: row.claimed_at,
-      updatedAt: row.updated_at,
+      claimedAt:
+        row.claimed_at,
+
+      updatedAt:
+        row.updated_at,
 
       claimTransactionId:
         row.claim_transaction_id,
+
+      latestInscriptionVersion:
+        row.latest_inscription_version,
+
+      latestInscriptionId:
+        row.latest_inscription_id,
+
+      latestInscribedAt:
+        row.latest_inscribed_at,
+
+      inscriptionPending:
+        row.inscription_pending,
     };
   });
 }

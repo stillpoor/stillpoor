@@ -10,12 +10,22 @@ export interface BlockCoordinate {
 
 export interface Block {
   coordinate: BlockCoordinate;
+
   ownerWalletAddress: string;
+
   pixels: PixelColor[];
   description: string | null;
+
   claimedAt: string;
   updatedAt: string;
+
   claimTransactionId: string;
+
+  latestInscriptionVersion: number;
+  latestInscriptionId: string | null;
+  latestInscribedAt: string | null;
+
+  inscriptionPending: boolean;
 }
 
 export interface BoardState {
