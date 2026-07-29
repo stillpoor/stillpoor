@@ -3,7 +3,6 @@
 import Image from "next/image";
 
 import {
-  useEffect,
   useState,
 } from "react";
 
@@ -13,6 +12,7 @@ import BlockEditor from "./BlockEditor";
 import BlockInspector from "./BlockInspector";
 import BoardControls from "./BoardControls";
 import BoardStatsHUD from "./BoardStatsHUD";
+import OrdinalMintModal from "./OrdinalMintModal";
 import PaymentModal from "./PaymentModal";
 import WalletButton from "./WalletButton";
 
@@ -23,28 +23,6 @@ import {
 import {
   useSelectedBlock,
 } from "../lib/selection/useSelectedBlock";
-
-interface HudPanelOpenedEventDetail {
-  panel:
-    | "about"
-    | "activity"
-    | "profile";
-}
-
-function dispatchPanelOpened(
-  panel: HudPanelOpenedEventDetail["panel"],
-) {
-  window.dispatchEvent(
-    new CustomEvent(
-      "hud:panel-opened",
-      {
-        detail: {
-          panel,
-        },
-      },
-    ),
-  );
-}
 
 export default function HUD() {
   const editorState =
@@ -63,65 +41,36 @@ export default function HUD() {
     setIsActivityOpen,
   ] = useState(false);
 
-  useEffect(() => {
-    const handlePanelOpened = (
-      event: Event,
-    ) => {
-      const customEvent =
-        event as CustomEvent<HudPanelOpenedEventDetail>;
-
-      if (
-        customEvent.detail
-          ?.panel !== "profile"
-      ) {
-        return;
-      }
-
-      setIsAboutOpen(false);
-      setIsActivityOpen(false);
-    };
-
-    window.addEventListener(
-      "hud:panel-opened",
-      handlePanelOpened,
-    );
-
-    return () => {
-      window.removeEventListener(
-        "hud:panel-opened",
-        handlePanelOpened,
-      );
-    };
-  }, []);
-
-  const handleAboutClick =
+  const handleOpenAbout =
     () => {
       setIsActivityOpen(false);
       setIsAboutOpen(true);
 
-      dispatchPanelOpened(
-        "about",
+      window.dispatchEvent(
+        new CustomEvent(
+          "profile:close",
+        ),
       );
     };
 
-  const handleActivityClick =
+  const handleToggleActivity =
     () => {
-      const nextIsOpen =
+      const shouldOpen =
         !isActivityOpen;
-
-      setIsActivityOpen(
-        nextIsOpen,
-      );
-
-      if (!nextIsOpen) {
-        return;
-      }
 
       setIsAboutOpen(false);
 
-      dispatchPanelOpened(
-        "activity",
+      setIsActivityOpen(
+        shouldOpen,
       );
+
+      if (shouldOpen) {
+        window.dispatchEvent(
+          new CustomEvent(
+            "profile:close",
+          ),
+        );
+      }
     };
 
   return (
@@ -145,39 +94,49 @@ export default function HUD() {
         <button
           type="button"
           onClick={
-            handleAboutClick
+            handleOpenAbout
           }
           className="rounded-lg border border-black/10 bg-white/95 px-4 py-2 text-sm font-medium text-black shadow-sm backdrop-blur-md transition hover:bg-white"
         >
           About
         </button>
 
-        <button
-          type="button"
-          onClick={
-            handleActivityClick
-          }
-          aria-expanded={
-            isActivityOpen
-          }
-          aria-haspopup="dialog"
-          className="rounded-lg border border-black/10 bg-white/95 px-4 py-2 text-sm font-medium text-black shadow-sm backdrop-blur-md transition hover:bg-white"
-        >
-          Activity
-        </button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={
+              handleToggleActivity
+            }
+            aria-expanded={
+              isActivityOpen
+            }
+            aria-haspopup="dialog"
+            className="rounded-lg border border-black/10 bg-white/95 px-4 py-2 text-sm font-medium text-black shadow-sm backdrop-blur-md transition hover:bg-white"
+          >
+            Activity
+          </button>
 
-        <WalletButton />
+          <ActivityMenu
+            isOpen={
+              isActivityOpen
+            }
+            onClose={() =>
+              setIsActivityOpen(
+                false,
+              )
+            }
+          />
+        </div>
 
-        <ActivityMenu
-          isOpen={
-            isActivityOpen
-          }
-          onClose={() =>
+        <div
+          onClickCapture={() =>
             setIsActivityOpen(
               false,
             )
           }
-        />
+        >
+          <WalletButton />
+        </div>
       </div>
 
       {editorState.isActive ? (
@@ -200,10 +159,10 @@ export default function HUD() {
 
       <PaymentModal />
 
+      <OrdinalMintModal />
+
       <AboutModal
-        isOpen={
-          isAboutOpen
-        }
+        isOpen={isAboutOpen}
         onClose={() =>
           setIsAboutOpen(
             false,

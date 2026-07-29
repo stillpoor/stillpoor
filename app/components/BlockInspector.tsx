@@ -11,10 +11,6 @@ import {
 } from "../lib/board/boardConfig";
 
 import {
-  setBlock,
-} from "../lib/board/boardStore";
-
-import {
   useBoardBlocks,
 } from "../lib/board/useBoardBlocks";
 
@@ -30,10 +26,6 @@ import {
   startEditorForExistingBlock,
   startEditorForNewOrdinalVersion,
 } from "../lib/editor/editorState";
-
-import {
-  mintBlockOrdinalSimulated,
-} from "../lib/ordinals/ordinalApi";
 
 import {
   reserveClaimOrder,
@@ -63,6 +55,10 @@ import {
 import type {
   BlockCoordinate,
 } from "../lib/board/boardTypes";
+
+import {
+  openFirstOrdinalMintModal,
+} from "../lib/ordinals/ordinalMintState";
 
 interface BlockInspectorProps {
   block: BlockCoordinate;
@@ -151,18 +147,6 @@ export default function BlockInspector({
     null,
   );
 
-  const [
-    isMinting,
-    setIsMinting,
-  ] = useState(false);
-
-  const [
-    mintError,
-    setMintError,
-  ] = useState<string | null>(
-    null,
-  );
-
   const currentWalletAddress =
     walletState.paymentAddress
       ?.address ?? null;
@@ -184,13 +168,6 @@ export default function BlockInspector({
         boardBlocks,
       ],
     );
-
-  useEffect(() => {
-    setMintError(null);
-  }, [
-    block.column,
-    block.row,
-  ]);
 
   useEffect(() => {
     let isActive = true;
@@ -412,51 +389,33 @@ export default function BlockInspector({
     };
 
   const handleMintOrdinal =
-    async () => {
-      if (
-        !occupiedBlock ||
-        !isOwnedByCurrentUser ||
-        occupiedBlock
-          .inscriptionPending ||
-        occupiedBlock
-          .latestInscriptionVersion >
-          0 ||
-        isMinting
-      ) {
-        return;
-      }
+  () => {
+    if (
+      !occupiedBlock ||
+      !isOwnedByCurrentUser ||
+      occupiedBlock
+        .inscriptionPending ||
+      occupiedBlock
+        .latestInscriptionVersion >
+        0
+    ) {
+      return;
+    }
 
-      setMintError(null);
-      setIsMinting(true);
+    openFirstOrdinalMintModal({
+      block: {
+        ...block,
+      },
 
-      try {
-        const result =
-          await mintBlockOrdinalSimulated(
-            block,
-          );
+      pixels: [
+        ...occupiedBlock.pixels,
+      ],
 
-        setBlock({
-          ...result.block,
-
-          coordinate: {
-            ...result.block
-              .coordinate,
-          },
-
-          pixels: [
-            ...result.block.pixels,
-          ],
-        });
-      } catch (error) {
-        setMintError(
-          error instanceof Error
-            ? error.message
-            : "Unable to mint the Ordinal.",
-        );
-      } finally {
-        setIsMinting(false);
-      }
-    };
+      description:
+        occupiedBlock.description ??
+        "",
+    });
+  };
 
   if (occupiedBlock) {
     const hasConfirmedInscription =
@@ -617,7 +576,7 @@ export default function BlockInspector({
                 onClick={
                   handleEditBlock
                 }
-                disabled={isMinting}
+                disabled={false}
                 className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium disabled:opacity-40"
               >
                 Edit Block
@@ -628,12 +587,10 @@ export default function BlockInspector({
                 onClick={
                   handleMintOrdinal
                 }
-                disabled={isMinting}
+                disabled={false}
                 className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {isMinting
-                  ? "Minting..."
-                  : "Mint Ordinal"}
+                Mint Ordinal
               </button>
             </div>
           )}
@@ -664,14 +621,6 @@ export default function BlockInspector({
             </div>
           )}
 
-        {mintError && (
-          <p
-            role="alert"
-            className="mt-3 text-sm text-red-600"
-          >
-            {mintError}
-          </p>
-        )}
       </aside>
     );
   }

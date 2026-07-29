@@ -583,6 +583,56 @@ export async function saveEditor(
   }
 }
 
+export function completeOrdinalVersionEditor(
+  block: Block,
+) {
+  if (
+    getAppMode() !== "editor" ||
+    isSaveInProgress ||
+    editorState.saveMode !==
+      "ordinal-version" ||
+    editorState
+      .expectedLatestInscriptionVersion ===
+      null ||
+    editorState.blocks.length !==
+      1
+  ) {
+    return false;
+  }
+
+  const editedCoordinate =
+    editorState.blocks[0];
+
+  if (
+    !editedCoordinate ||
+    editedCoordinate.row !==
+      block.coordinate.row ||
+    editedCoordinate.column !==
+      block.coordinate.column ||
+    block.latestInscriptionVersion !==
+      editorState
+        .expectedLatestInscriptionVersion +
+        1
+  ) {
+    return false;
+  }
+
+  saveBlockToStore(
+    block,
+  );
+
+  setSelectedBlock({
+    ...block.coordinate,
+  });
+
+  setAppMode("browsing");
+
+  resetEditorState();
+  notifyListeners();
+
+  return true;
+}
+
 export function closeEditor() {
   if (isSaveInProgress) {
     return;

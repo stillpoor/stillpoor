@@ -28,6 +28,10 @@ import {
   useWalletState,
 } from "../lib/wallet/useWalletState";
 
+import {
+  openNewOrdinalVersionMintModal,
+} from "../lib/ordinals/ordinalMintState";
+
 function getPublicBlockNumber(
   row: number,
   column: number,
@@ -116,39 +120,72 @@ export default function BlockEditor() {
     ) + 1;
 
   const handleSave =
-    async () => {
-      const paymentAddress =
-        walletState
-          .paymentAddress
-          ?.address;
+  async () => {
+    const paymentAddress =
+      walletState
+        .paymentAddress
+        ?.address;
 
-      if (!paymentAddress) {
+    if (!paymentAddress) {
+      setSaveError(
+        "Connect the wallet that owns this Block before saving.",
+      );
+
+      return;
+    }
+
+    setSaveError(null);
+
+    if (isOrdinalVersion) {
+      const expectedLatestVersion =
+        editorState
+          .expectedLatestInscriptionVersion;
+
+      if (
+        expectedLatestVersion ===
+        null
+      ) {
         setSaveError(
-          "Connect the wallet that owns this Block before saving.",
+          "The previous Ordinal version is missing.",
         );
 
         return;
       }
 
-      setSaveError(null);
-      setIsSaving(true);
+      openNewOrdinalVersionMintModal({
+        block: {
+          ...currentBlock,
+        },
 
-      try {
-        await saveEditor(
-          paymentAddress,
-        );
-      } catch (error) {
-        setSaveError(
-          error instanceof Error
-            ? error.message
-            : isOrdinalVersion
-              ? "Unable to create the new Ordinal version."
-              : "Unable to save the Blocks.",
-        );
-      } finally {
-        setIsSaving(false);
-      }
-    };
+        pixels: [
+          ...draft.pixels,
+        ],
+
+        description:
+          draft.description,
+
+        expectedLatestVersion,
+      });
+
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      await saveEditor(
+        paymentAddress,
+      );
+    } catch (error) {
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save the Blocks.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <aside className="pointer-events-auto absolute bottom-4 left-1/2 w-[calc(100%-2rem)] max-w-[560px] -translate-x-1/2 rounded-xl bg-white p-4 shadow-lg sm:bottom-8 sm:p-5">
