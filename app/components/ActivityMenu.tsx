@@ -17,6 +17,10 @@ import {
 } from "../lib/board/useBoardBlocks";
 
 import {
+  loadOrdinalActivity,
+} from "../lib/ordinals/ordinalActivityApi";
+
+import {
   loadPublicWalletProfiles,
 } from "../lib/profile/publicProfileApi";
 
@@ -26,12 +30,22 @@ import {
 
 import type {
   Block,
+  BlockCoordinate,
+  PixelColor,
 } from "../lib/board/boardTypes";
+
+import type {
+  OrdinalActivity,
+} from "../lib/ordinals/ordinalActivityApi";
 
 type ActivityFilter =
   | "all"
   | "blocks"
   | "ordinals";
+
+type ActivityType =
+  | "block"
+  | "ordinal";
 
 interface ActivityMenuProps {
   isOpen: boolean;
@@ -41,6 +55,25 @@ interface ActivityMenuProps {
 interface ProfileUpdatedEventDetail {
   paymentAddress: string;
   username: string | null;
+}
+
+interface ActivityItem {
+  id: string;
+  type: ActivityType;
+
+  timestamp: string;
+
+  blockNumber: number;
+  coordinate: BlockCoordinate;
+
+  ownerWalletAddress: string;
+
+  pixels: PixelColor[];
+
+  latestInscriptionVersion: number;
+
+  ordinalVersion: number | null;
+  inscriptionId: string | null;
 }
 
 function getPublicBlockNumber(
@@ -68,7 +101,7 @@ function formatWalletAddress(
 }
 
 function formatActivityDate(
-  claimedAt: string,
+  activityDate: string,
 ) {
   return new Intl.DateTimeFormat(
     "en-GB",
@@ -80,8 +113,17 @@ function formatActivityDate(
       minute: "2-digit",
     },
   ).format(
-    new Date(claimedAt),
+    new Date(activityDate),
   );
+}
+
+function formatInscriptionId(
+  inscriptionId: string,
+) {
+  return `${inscriptionId.slice(
+    0,
+    10,
+  )}…${inscriptionId.slice(-8)}`;
 }
 
 export default function ActivityMenu({
@@ -96,6 +138,25 @@ export default function ActivityMenu({
     setActiveFilter,
   ] = useState<ActivityFilter>(
     "all",
+  );
+
+  const [
+    ordinalActivities,
+    setOrdinalActivities,
+  ] = useState<
+    OrdinalActivity[]
+  >([]);
+
+  const [
+    isOrdinalActivityLoading,
+    setIsOrdinalActivityLoading,
+  ] = useState(false);
+
+  const [
+    ordinalActivityError,
+    setOrdinalActivityError,
+  ] = useState<string | null>(
+    null,
   );
 
   const [
@@ -125,25 +186,159 @@ export default function ActivityMenu({
       ],
     );
 
-  const ownerPaymentAddresses =
+  const ordinalStateKey =
     useMemo(
-      () => [
-        ...new Set(
-          sortedBlocks.map(
+      () =>
+        boardBlocks
+          .map(
             (block) =>
-              block.ownerWalletAddress,
-          ),
-        ),
+              `${block.coordinate.row}:${block.coordinate.column}:${block.latestInscriptionVersion}:${block.inscriptionPending}`,
+          )
+          .sort()
+          .join("|"),
+      [
+        boardBlocks,
       ],
+    );
+
+  const blockActivityItems =
+    useMemo<ActivityItem[]>(
+      () =>
+        sortedBlocks.map(
+          (block) => ({
+            id:
+              `block:${block.coordinate.row}:${block.coordinate.column}`,
+
+            type: "block",
+
+            timestamp:
+              block.claimedAt,
+
+            blockNumber:
+              getPublicBlockNumber(
+                block,
+              ),
+
+            coordinate: {
+              ...block.coordinate,
+            },
+
+            ownerWalletAddress:
+              block.ownerWalletAddress,
+
+            pixels: [
+              ...block.pixels,
+            ],
+
+            latestInscriptionVersion:
+              block.latestInscriptionVersion,
+
+            ordinalVersion: null,
+            inscriptionId: null,
+          }),
+        ),
       [
         sortedBlocks,
       ],
     );
 
-  const visibleBlocks =
-    activeFilter === "ordinals"
-      ? []
-      : sortedBlocks;
+  const ordinalActivityItems =
+    useMemo<ActivityItem[]>(
+      () =>
+        ordinalActivities.map(
+          (activity) => ({
+            id:
+              `ordinal:${activity.id}`,
+
+            type: "ordinal",
+
+            timestamp:
+              activity.confirmedAt,
+
+            blockNumber:
+              activity.blockNumber,
+
+            coordinate: {
+              ...activity.coordinate,
+            },
+
+            ownerWalletAddress:
+              activity.ownerWalletAddress,
+
+            pixels: [
+              ...activity.pixels,
+            ],
+
+            latestInscriptionVersion:
+              activity.version,
+
+            ordinalVersion:
+              activity.version,
+
+            inscriptionId:
+              activity.inscriptionId,
+          }),
+        ),
+      [
+        ordinalActivities,
+      ],
+    );
+
+  const visibleActivities =
+    useMemo(() => {
+      if (
+        activeFilter ===
+        "blocks"
+      ) {
+        return blockActivityItems;
+      }
+
+      if (
+        activeFilter ===
+        "ordinals"
+      ) {
+        return ordinalActivityItems;
+      }
+
+      return [
+        ...blockActivityItems,
+        ...ordinalActivityItems,
+      ].sort(
+        (
+          firstActivity,
+          secondActivity,
+        ) =>
+          new Date(
+            secondActivity.timestamp,
+          ).getTime() -
+          new Date(
+            firstActivity.timestamp,
+          ).getTime(),
+      );
+    }, [
+      activeFilter,
+      blockActivityItems,
+      ordinalActivityItems,
+    ]);
+
+  const ownerPaymentAddresses =
+    useMemo(
+      () => [
+        ...new Set(
+          [
+            ...blockActivityItems,
+            ...ordinalActivityItems,
+          ].map(
+            (activity) =>
+              activity.ownerWalletAddress,
+          ),
+        ),
+      ],
+      [
+        blockActivityItems,
+        ordinalActivityItems,
+      ],
+    );
 
   useEffect(() => {
     if (!isOpen) {
@@ -153,7 +348,9 @@ export default function ActivityMenu({
     const handleKeyDown = (
       event: KeyboardEvent,
     ) => {
-      if (event.key === "Escape") {
+      if (
+        event.key === "Escape"
+      ) {
         onClose();
       }
     };
@@ -172,6 +369,58 @@ export default function ActivityMenu({
   }, [
     isOpen,
     onClose,
+  ]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    let isActive = true;
+
+    setIsOrdinalActivityLoading(
+      true,
+    );
+
+    setOrdinalActivityError(
+      null,
+    );
+
+    void loadOrdinalActivity()
+      .then((activities) => {
+        if (!isActive) {
+          return;
+        }
+
+        setOrdinalActivities(
+          activities,
+        );
+      })
+      .catch((error) => {
+        if (!isActive) {
+          return;
+        }
+
+        setOrdinalActivityError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load Ordinal activity.",
+        );
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsOrdinalActivityLoading(
+            false,
+          );
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [
+    isOpen,
+    ordinalStateKey,
   ]);
 
   useEffect(() => {
@@ -259,11 +508,11 @@ export default function ActivityMenu({
     isOpen,
   ]);
 
-  const handleBlockClick = (
-    block: Block,
+  const handleActivityClick = (
+    activity: ActivityItem,
   ) => {
     setSelectedBlock(
-      block.coordinate,
+      activity.coordinate,
     );
 
     window.dispatchEvent(
@@ -272,7 +521,7 @@ export default function ActivityMenu({
         {
           detail: {
             block:
-              block.coordinate,
+              activity.coordinate,
           },
         },
       ),
@@ -300,6 +549,18 @@ export default function ActivityMenu({
       label: "Ordinals",
     },
   ];
+
+  const showOrdinalLoading =
+    activeFilter === "ordinals" &&
+    isOrdinalActivityLoading &&
+    ordinalActivityItems.length ===
+      0;
+
+  const showOrdinalError =
+    activeFilter === "ordinals" &&
+    Boolean(
+      ordinalActivityError,
+    );
 
   return (
     <div
@@ -379,57 +640,84 @@ export default function ActivityMenu({
           </p>
 
           <p className="text-xs font-semibold text-black/45">
-            {visibleBlocks.length}
+            {visibleActivities.length}
           </p>
         </div>
 
-        {activeFilter ===
-        "ordinals" ? (
-          <p className="rounded-xl bg-black/5 px-3 py-4 text-sm leading-5 text-black/55">
-            Ordinal activity will
-            appear here after
-            inscriptions launch.
+        {showOrdinalLoading ? (
+          <p className="rounded-xl bg-black/5 px-3 py-4 text-sm text-black/55">
+            Loading Ordinal activity...
           </p>
-        ) : visibleBlocks.length ===
+        ) : showOrdinalError ? (
+          <p
+            role="alert"
+            className="rounded-xl bg-red-50 px-3 py-4 text-sm text-red-600"
+          >
+            {ordinalActivityError}
+          </p>
+        ) : visibleActivities.length ===
           0 ? (
           <p className="rounded-xl bg-black/5 px-3 py-4 text-sm text-black/55">
-            No Block activity yet.
+            {activeFilter ===
+            "ordinals"
+              ? "No Ordinal activity yet."
+              : "No Block activity yet."}
           </p>
         ) : (
           <div className="space-y-1">
-            {visibleBlocks.map(
-              (block) => {
-                const blockNumber =
-                  getPublicBlockNumber(
-                    block,
-                  );
-
+            {visibleActivities.map(
+              (activity) => {
                 const ownerUsername =
                   ownerUsernames[
-                    block
+                    activity
                       .ownerWalletAddress
                   ] ?? null;
 
                 return (
                   <button
-                    key={`${block.coordinate.row}:${block.coordinate.column}`}
+                    key={activity.id}
                     type="button"
                     onClick={() =>
-                      handleBlockClick(
-                        block,
+                      handleActivityClick(
+                        activity,
                       )
                     }
                     className="flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-black/5"
                   >
                     <BlockThumbnail
-                      block={block}
-                    />
+  block={{
+    pixels:
+      activity.pixels,
+
+    latestInscriptionVersion:
+      activity.type === "ordinal"
+        ? activity.latestInscriptionVersion
+        : 0,
+  }}
+/>
 
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-semibold text-black">
                         Block #
-                        {blockNumber} claimed
+                        {
+                          activity.blockNumber
+                        }{" "}
+                        {activity.type ===
+                        "ordinal"
+                          ? "inscribed"
+                          : "claimed"}
                       </span>
+
+                      {activity.type ===
+                        "ordinal" &&
+                        activity.ordinalVersion && (
+                          <span className="mt-0.5 block text-xs font-semibold text-amber-700">
+                            Ordinal v
+                            {
+                              activity.ordinalVersion
+                            }
+                          </span>
+                        )}
 
                       {ownerUsername && (
                         <span className="mt-0.5 block truncate text-xs font-semibold text-black/65">
@@ -439,20 +727,34 @@ export default function ActivityMenu({
 
                       <span
                         title={
-                          block
+                          activity
                             .ownerWalletAddress
                         }
                         className="mt-0.5 block truncate font-mono text-xs text-black/45"
                       >
                         {formatWalletAddress(
-                          block
+                          activity
                             .ownerWalletAddress,
                         )}
                       </span>
 
+                      {activity.inscriptionId && (
+                        <span
+                          title={
+                            activity.inscriptionId
+                          }
+                          className="mt-0.5 block truncate font-mono text-xs text-black/40"
+                        >
+                          Inscription{" "}
+                          {formatInscriptionId(
+                            activity.inscriptionId,
+                          )}
+                        </span>
+                      )}
+
                       <span className="mt-0.5 block text-xs text-black/40">
                         {formatActivityDate(
-                          block.claimedAt,
+                          activity.timestamp,
                         )}
                       </span>
                     </span>

@@ -14,7 +14,11 @@ import type {
 } from "../lib/board/boardTypes";
 
 interface BlockThumbnailProps {
-  block: Block;
+  block: Pick<
+    Block,
+    | "pixels"
+    | "latestInscriptionVersion"
+  >;
 }
 
 export default function BlockThumbnail({
@@ -22,6 +26,10 @@ export default function BlockThumbnail({
 }: BlockThumbnailProps) {
   const canvasRef =
     useRef<HTMLCanvasElement>(null);
+
+  const isInscribed =
+    block.latestInscriptionVersion >
+    0;
 
   useEffect(() => {
     const canvas =
@@ -84,7 +92,11 @@ export default function BlockThumbnail({
       width={PIXELS_PER_BLOCK}
       height={PIXELS_PER_BLOCK}
       aria-hidden="true"
-      className="h-12 w-12 shrink-0 rounded-md bg-white [image-rendering:pixelated]"
+      className={
+        isInscribed
+          ? "h-12 w-12 shrink-0 rounded-md bg-white ring-2 ring-amber-400 ring-offset-1 ring-offset-white [image-rendering:pixelated]"
+          : "h-12 w-12 shrink-0 rounded-md bg-white [image-rendering:pixelated]"
+      }
     />
   );
 }
