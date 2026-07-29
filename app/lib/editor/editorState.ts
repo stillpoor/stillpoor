@@ -8,9 +8,14 @@ import {
   getBlockKey,
   setBlock,
 } from "../board/boardStore";
+
 import {
   PIXELS_PER_BLOCK,
 } from "../board/boardTypes";
+
+import {
+  mintNextBlockOrdinalSimulated,
+} from "../ordinals/ordinalApi";
 
 import {
   setSelectedBlock,
@@ -19,17 +24,24 @@ import {
 import {
   saveEditorBlocks,
 } from "./editorApi";
-import { editorConfig } from "./editorConfig";
+
+import {
+  editorConfig,
+} from "./editorConfig";
 
 import type {
+  Block,
   BlockCoordinate,
   PixelColor,
 } from "../board/boardTypes";
+
 import type {
   PixelCoordinate,
 } from "./editorCoordinates";
+
 import type {
   BlockDraft,
+  EditorSaveMode,
   EditorState,
 } from "./editorTypes";
 
@@ -37,11 +49,19 @@ type EditorListener = () => void;
 
 let editorState: EditorState = {
   isActive: false,
+
   blocks: [],
   currentBlockIndex: 0,
+
   selectedColor:
     editorConfig.defaultColor,
+
   drafts: new Map(),
+
+  saveMode: "standard",
+
+  expectedLatestInscriptionVersion:
+    null,
 };
 
 let isSaveInProgress = false;
@@ -50,29 +70,41 @@ const listeners =
   new Set<EditorListener>();
 
 function notifyListeners() {
-  listeners.forEach((listener) => {
-    listener();
-  });
+  listeners.forEach(
+    (listener) => {
+      listener();
+    },
+  );
 }
 
 function resetEditorState() {
   editorState = {
     isActive: false,
+
     blocks: [],
     currentBlockIndex: 0,
+
     selectedColor:
       editorConfig.defaultColor,
+
     drafts: new Map(),
+
+    saveMode: "standard",
+
+    expectedLatestInscriptionVersion:
+      null,
   };
 }
 
-export function getEditorState() {
-  return editorState;
-}
-
-export function startEditor(
+function activateEditor(
   blocks: BlockCoordinate[],
-  drafts: Map<string, BlockDraft>,
+  drafts: Map<
+    string,
+    BlockDraft
+  >,
+  saveMode: EditorSaveMode,
+  expectedLatestInscriptionVersion:
+    number | null,
 ) {
   if (blocks.length === 0) {
     return;
@@ -82,14 +114,90 @@ export function startEditor(
 
   editorState = {
     isActive: true,
+
     blocks,
     currentBlockIndex: 0,
+
     selectedColor:
       editorConfig.defaultColor,
+
     drafts,
+
+    saveMode,
+
+    expectedLatestInscriptionVersion,
   };
 
   notifyListeners();
+}
+
+function copyBlockIntoDraft(
+  existingBlock: Block,
+) {
+  const coordinate = {
+    ...existingBlock.coordinate,
+  };
+
+  const drafts =
+    new Map<
+      string,
+      BlockDraft
+    >();
+
+  drafts.set(
+    getBlockKey(
+      coordinate,
+    ),
+    {
+      pixels: [
+        ...existingBlock.pixels,
+      ],
+
+      description:
+        existingBlock.description ??
+        "",
+    },
+  );
+
+  return {
+    coordinate,
+    drafts,
+  };
+}
+
+function saveBlockToStore(
+  block: Block,
+) {
+  setBlock({
+    ...block,
+
+    coordinate: {
+      ...block.coordinate,
+    },
+
+    pixels: [
+      ...block.pixels,
+    ],
+  });
+}
+
+export function getEditorState() {
+  return editorState;
+}
+
+export function startEditor(
+  blocks: BlockCoordinate[],
+  drafts: Map<
+    string,
+    BlockDraft
+  >,
+) {
+  activateEditor(
+    blocks,
+    drafts,
+    "standard",
+    null,
+  );
 }
 
 export function startEditorForExistingBlock(
@@ -98,32 +206,70 @@ export function startEditorForExistingBlock(
   const existingBlock =
     getBlock(coordinate);
 
-  if (!existingBlock) {
+  if (
+    !existingBlock ||
+    existingBlock
+      .inscriptionPending ||
+    existingBlock
+      .latestInscriptionVersion >
+      0
+  ) {
     return false;
   }
 
-  const editorCoordinate = {
-    ...existingBlock.coordinate,
-  };
+  const editorData =
+    copyBlockIntoDraft(
+      existingBlock,
+    );
 
-  const drafts =
-    new Map<string, BlockDraft>();
+  activateEditor(
+    [
+      editorData.coordinate,
+    ],
 
-  drafts.set(
-    getBlockKey(editorCoordinate),
-    {
-      pixels: [
-        ...existingBlock.pixels,
-      ],
+    editorData.drafts,
 
-      description:
-        existingBlock.description ?? "",
-    },
+    "standard",
+
+    null,
   );
 
-  startEditor(
-    [editorCoordinate],
-    drafts,
+  return true;
+}
+
+export function startEditorForNewOrdinalVersion(
+  coordinate: BlockCoordinate,
+) {
+  const existingBlock =
+    getBlock(coordinate);
+
+  if (
+    !existingBlock ||
+    existingBlock
+      .inscriptionPending ||
+    existingBlock
+      .latestInscriptionVersion <
+      1
+  ) {
+    return false;
+  }
+
+  const editorData =
+    copyBlockIntoDraft(
+      existingBlock,
+    );
+
+  activateEditor(
+    [
+      editorData.coordinate,
+    ],
+
+    editorData.drafts,
+
+    "ordinal-version",
+
+    existingBlock
+      .latestInscriptionVersion,
   );
 
   return true;
@@ -136,14 +282,17 @@ export function setCurrentEditorBlockIndex(
     getAppMode() !== "editor" ||
     isSaveInProgress ||
     index < 0 ||
-    index >= editorState.blocks.length
+    index >=
+      editorState.blocks.length
   ) {
     return;
   }
 
   editorState = {
     ...editorState,
-    currentBlockIndex: index,
+
+    currentBlockIndex:
+      index,
   };
 
   notifyListeners();
@@ -160,14 +309,17 @@ export function setSelectedEditorColor(
   }
 
   if (
-    editorState.selectedColor === color
+    editorState.selectedColor ===
+    color
   ) {
     return;
   }
 
   editorState = {
     ...editorState,
-    selectedColor: color,
+
+    selectedColor:
+      color,
   };
 
   notifyListeners();
@@ -190,20 +342,24 @@ export function paintPixel(
     getBlockKey(block);
 
   const existingDraft =
-    editorState.drafts.get(blockKey);
+    editorState.drafts.get(
+      blockKey,
+    );
 
   if (!existingDraft) {
     return;
   }
 
   const pixelIndex =
-    pixel.row * PIXELS_PER_BLOCK +
+    pixel.row *
+      PIXELS_PER_BLOCK +
     pixel.column;
 
   if (
     pixelIndex < 0 ||
     pixelIndex >=
-      existingDraft.pixels.length
+      existingDraft
+        .pixels.length
   ) {
     return;
   }
@@ -220,19 +376,30 @@ export function paintPixel(
     ...existingDraft.pixels,
   ];
 
-  nextPixels[pixelIndex] = color;
+  nextPixels[
+    pixelIndex
+  ] = color;
 
   const nextDrafts =
-    new Map(editorState.drafts);
+    new Map(
+      editorState.drafts,
+    );
 
-  nextDrafts.set(blockKey, {
-    ...existingDraft,
-    pixels: nextPixels,
-  });
+  nextDrafts.set(
+    blockKey,
+    {
+      ...existingDraft,
+
+      pixels:
+        nextPixels,
+    },
+  );
 
   editorState = {
     ...editorState,
-    drafts: nextDrafts,
+
+    drafts:
+      nextDrafts,
   };
 
   notifyListeners();
@@ -253,25 +420,37 @@ export function updateEditorDescription(
     getBlockKey(block);
 
   const existingDraft =
-    editorState.drafts.get(blockKey);
+    editorState.drafts.get(
+      blockKey,
+    );
 
   if (!existingDraft) {
     return;
   }
 
   const nextDrafts =
-    new Map(editorState.drafts);
+    new Map(
+      editorState.drafts,
+    );
 
-  nextDrafts.set(blockKey, {
-    ...existingDraft,
+  nextDrafts.set(
+    blockKey,
+    {
+      ...existingDraft,
 
-    description:
-      description.slice(0, 300),
-  });
+      description:
+        description.slice(
+          0,
+          300,
+        ),
+    },
+  );
 
   editorState = {
     ...editorState,
-    drafts: nextDrafts,
+
+    drafts:
+      nextDrafts,
   };
 
   notifyListeners();
@@ -287,7 +466,9 @@ export async function saveEditor(
     return false;
   }
 
-  if (!paymentAddress.trim()) {
+  if (
+    !paymentAddress.trim()
+  ) {
     throw new Error(
       "A connected wallet is required to save.",
     );
@@ -298,7 +479,9 @@ export async function saveEditor(
       (coordinate) => {
         const draft =
           editorState.drafts.get(
-            getBlockKey(coordinate),
+            getBlockKey(
+              coordinate,
+            ),
           );
 
         if (!draft) {
@@ -327,30 +510,70 @@ export async function saveEditor(
   isSaveInProgress = true;
 
   try {
-    const savedBlocks =
-      await saveEditorBlocks({
-        paymentAddress:
-          paymentAddress.trim(),
+    if (
+      editorState.saveMode ===
+      "ordinal-version"
+    ) {
+      if (
+        blocksToSave.length !==
+          1 ||
+        editorState
+          .expectedLatestInscriptionVersion ===
+          null
+      ) {
+        throw new Error(
+          "The Ordinal editor state is invalid.",
+        );
+      }
 
-        blocks: blocksToSave,
+      const blockToMint =
+        blocksToSave[0];
+
+      const result =
+        await mintNextBlockOrdinalSimulated(
+          {
+            block:
+              blockToMint.coordinate,
+
+            expectedLatestVersion:
+              editorState
+                .expectedLatestInscriptionVersion,
+
+            pixels:
+              blockToMint.pixels,
+
+            description:
+              blockToMint.description,
+          },
+        );
+
+      saveBlockToStore(
+        result.block,
+      );
+
+      setSelectedBlock({
+        ...result.block
+          .coordinate,
       });
+    } else {
+      const savedBlocks =
+        await saveEditorBlocks({
+          paymentAddress:
+            paymentAddress.trim(),
 
-    savedBlocks.forEach((block) => {
-      setBlock({
-        ...block,
+          blocks:
+            blocksToSave,
+        });
 
-        coordinate: {
-          ...block.coordinate,
-        },
+      savedBlocks.forEach(
+        saveBlockToStore,
+      );
 
-        pixels: [
-          ...block.pixels,
-        ],
-      });
-    });
+      setSelectedBlock(null);
+    }
 
-    setSelectedBlock(null);
     setAppMode("browsing");
+
     resetEditorState();
     notifyListeners();
 
@@ -366,6 +589,7 @@ export function closeEditor() {
   }
 
   setAppMode("browsing");
+
   resetEditorState();
   notifyListeners();
 }
@@ -373,9 +597,13 @@ export function closeEditor() {
 export function subscribeToEditor(
   listener: EditorListener,
 ) {
-  listeners.add(listener);
+  listeners.add(
+    listener,
+  );
 
   return () => {
-    listeners.delete(listener);
+    listeners.delete(
+      listener,
+    );
   };
 }

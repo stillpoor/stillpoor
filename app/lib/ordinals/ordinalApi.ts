@@ -1,22 +1,31 @@
 import type {
   Block,
   BlockCoordinate,
+  PixelColor,
 } from "../board/boardTypes";
 
-interface SimulatedInscription {
+export interface SimulatedInscription {
   id: string;
+
   version: number;
   status: string;
+
   inscriptionId: string;
-  destinationOrdinalsAddress: string;
+
+  destinationOrdinalsAddress:
+    string;
+
   commitTransactionId: string;
   revealTransactionId: string;
 }
 
 interface MintResponse {
   ok: true;
+
   block: Block;
-  inscription: SimulatedInscription;
+
+  inscription:
+    SimulatedInscription;
 }
 
 interface ErrorResponse {
@@ -24,26 +33,18 @@ interface ErrorResponse {
   error?: string;
 }
 
-export async function mintBlockOrdinalSimulated(
-  block: BlockCoordinate,
+interface MintNextBlockOrdinalOptions {
+  block: BlockCoordinate;
+
+  expectedLatestVersion: number;
+
+  pixels: PixelColor[];
+  description: string;
+}
+
+async function readMintResponse(
+  response: Response,
 ): Promise<MintResponse> {
-  const response = await fetch(
-    "/api/ordinals/mint-simulated",
-    {
-      method: "POST",
-      credentials: "same-origin",
-
-      headers: {
-        "Content-Type":
-          "application/json",
-      },
-
-      body: JSON.stringify({
-        block,
-      }),
-    },
-  );
-
   let data:
     | MintResponse
     | ErrorResponse;
@@ -65,11 +66,74 @@ export async function mintBlockOrdinalSimulated(
   ) {
     throw new Error(
       "error" in data &&
-        typeof data.error === "string"
+        typeof data.error ===
+          "string"
         ? data.error
         : "Unable to mint the Ordinal.",
     );
   }
 
   return data;
+}
+
+export async function mintBlockOrdinalSimulated(
+  block: BlockCoordinate,
+): Promise<MintResponse> {
+  const response = await fetch(
+    "/api/ordinals/mint-simulated",
+    {
+      method: "POST",
+
+      credentials: "same-origin",
+
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify({
+        block,
+      }),
+    },
+  );
+
+  return readMintResponse(
+    response,
+  );
+}
+
+export async function mintNextBlockOrdinalSimulated(
+  options: MintNextBlockOrdinalOptions,
+): Promise<MintResponse> {
+  const response = await fetch(
+    "/api/ordinals/mint-next-simulated",
+    {
+      method: "POST",
+
+      credentials: "same-origin",
+
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify({
+        block:
+          options.block,
+
+        expectedLatestVersion:
+          options.expectedLatestVersion,
+
+        pixels:
+          options.pixels,
+
+        description:
+          options.description,
+      }),
+    },
+  );
+
+  return readMintResponse(
+    response,
+  );
 }

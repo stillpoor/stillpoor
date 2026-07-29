@@ -4,9 +4,14 @@ import {
   useState,
 } from "react";
 
-import { boardConfig } from "../lib/board/boardConfig";
+import {
+  boardConfig,
+} from "../lib/board/boardConfig";
 
-import { editorConfig } from "../lib/editor/editorConfig";
+import {
+  editorConfig,
+} from "../lib/editor/editorConfig";
+
 import {
   closeEditor,
   saveEditor,
@@ -14,7 +19,10 @@ import {
   setSelectedEditorColor,
   updateEditorDescription,
 } from "../lib/editor/editorState";
-import { useEditorState } from "../lib/editor/useEditorState";
+
+import {
+  useEditorState,
+} from "../lib/editor/useEditorState";
 
 import {
   useWalletState,
@@ -50,18 +58,22 @@ export default function BlockEditor() {
   const [
     saveError,
     setSaveError,
-  ] = useState<string | null>(null);
+  ] = useState<
+    string | null
+  >(null);
 
   if (
     !editorState.isActive ||
-    editorState.blocks.length === 0
+    editorState.blocks.length ===
+      0
   ) {
     return null;
   }
 
   const currentBlock =
     editorState.blocks[
-      editorState.currentBlockIndex
+      editorState
+        .currentBlockIndex
     ];
 
   if (!currentBlock) {
@@ -81,55 +93,82 @@ export default function BlockEditor() {
     editorState.blocks.length;
 
   const hasPreviousBlock =
-    editorState.currentBlockIndex > 0;
+    editorState
+      .currentBlockIndex > 0;
 
   const hasNextBlock =
-    editorState.currentBlockIndex <
+    editorState
+      .currentBlockIndex <
     blockCount - 1;
 
   const showBlockNavigation =
     blockCount > 1;
 
-  const handleSave = async () => {
-    const paymentAddress =
-      walletState.paymentAddress?.address;
+  const isOrdinalVersion =
+    editorState.saveMode ===
+    "ordinal-version";
 
-    if (!paymentAddress) {
-      setSaveError(
-        "Connect the wallet that owns this Block before saving.",
-      );
+  const nextOrdinalVersion =
+    (
+      editorState
+        .expectedLatestInscriptionVersion ??
+      0
+    ) + 1;
 
-      return;
-    }
+  const handleSave =
+    async () => {
+      const paymentAddress =
+        walletState
+          .paymentAddress
+          ?.address;
 
-    setSaveError(null);
-    setIsSaving(true);
+      if (!paymentAddress) {
+        setSaveError(
+          "Connect the wallet that owns this Block before saving.",
+        );
 
-    try {
-      await saveEditor(
-        paymentAddress,
-      );
-    } catch (error) {
-      setSaveError(
-        error instanceof Error
-          ? error.message
-          : "Unable to save the Blocks.",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
+        return;
+      }
+
+      setSaveError(null);
+      setIsSaving(true);
+
+      try {
+        await saveEditor(
+          paymentAddress,
+        );
+      } catch (error) {
+        setSaveError(
+          error instanceof Error
+            ? error.message
+            : isOrdinalVersion
+              ? "Unable to create the new Ordinal version."
+              : "Unable to save the Blocks.",
+        );
+      } finally {
+        setIsSaving(false);
+      }
+    };
 
   return (
     <aside className="pointer-events-auto absolute bottom-4 left-1/2 w-[calc(100%-2rem)] max-w-[560px] -translate-x-1/2 rounded-xl bg-white p-4 shadow-lg sm:bottom-8 sm:p-5">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-lg font-semibold">
-          Block #
-          {getPublicBlockNumber(
-            currentBlock.row,
-            currentBlock.column,
+        <div>
+          <h2 className="text-lg font-semibold">
+            Block #
+            {getPublicBlockNumber(
+              currentBlock.row,
+              currentBlock.column,
+            )}
+          </h2>
+
+          {isOrdinalVersion && (
+            <p className="mt-1 text-sm font-medium text-amber-700">
+              Creating Ordinal v
+              {nextOrdinalVersion}
+            </p>
           )}
-        </h2>
+        </div>
 
         {showBlockNavigation && (
           <div className="flex items-center gap-2">
@@ -142,7 +181,8 @@ export default function BlockEditor() {
               }
               onClick={() =>
                 setCurrentEditorBlockIndex(
-                  editorState.currentBlockIndex -
+                  editorState
+                    .currentBlockIndex -
                     1,
                 )
               }
@@ -153,7 +193,8 @@ export default function BlockEditor() {
 
             <span className="min-w-20 text-center text-sm text-gray-600">
               Block{" "}
-              {editorState.currentBlockIndex +
+              {editorState
+                .currentBlockIndex +
                 1}{" "}
               of {blockCount}
             </span>
@@ -167,7 +208,8 @@ export default function BlockEditor() {
               }
               onClick={() =>
                 setCurrentEditorBlockIndex(
-                  editorState.currentBlockIndex +
+                  editorState
+                    .currentBlockIndex +
                     1,
                 )
               }
@@ -179,6 +221,14 @@ export default function BlockEditor() {
         )}
       </div>
 
+      {isOrdinalVersion && (
+        <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+          Saving these changes will
+          create a permanent new
+          Ordinal version.
+        </p>
+      )}
+
       <div className="mt-5">
         <label
           htmlFor="block-description"
@@ -189,7 +239,9 @@ export default function BlockEditor() {
 
         <textarea
           id="block-description"
-          value={draft.description}
+          value={
+            draft.description
+          }
           disabled={isSaving}
           onChange={(event) =>
             updateEditorDescription(
@@ -211,42 +263,55 @@ export default function BlockEditor() {
         <div className="overflow-x-auto pb-2">
           <div className="flex min-w-max flex-col gap-2">
             {editorConfig.paletteRows.map(
-              (row, rowIndex) => (
+              (
+                row,
+                rowIndex,
+              ) => (
                 <div
                   key={rowIndex}
                   className="flex gap-2"
                 >
-                  {row.map((color) => {
-                    const isSelected =
-                      editorState.selectedColor ===
-                      color;
+                  {row.map(
+                    (color) => {
+                      const isSelected =
+                        editorState
+                          .selectedColor ===
+                        color;
 
-                    return (
-                      <button
-                        key={color}
-                        type="button"
-                        disabled={isSaving}
-                        aria-label={`Select color ${color}`}
-                        aria-pressed={isSelected}
-                        title={color}
-                        onClick={() =>
-                          setSelectedEditorColor(
-                            color,
-                          )
-                        }
-                        className={[
-                          "h-8 w-8 shrink-0 rounded-full border-2 transition disabled:cursor-not-allowed disabled:opacity-50",
-                          isSelected
-                            ? "border-black ring-2 ring-black ring-offset-2"
-                            : "border-gray-950 hover:scale-105",
-                        ].join(" ")}
-                        style={{
-                          backgroundColor:
-                            color,
-                        }}
-                      />
-                    );
-                  })}
+                      return (
+                        <button
+                          key={color}
+                          type="button"
+                          disabled={
+                            isSaving
+                          }
+                          aria-label={`Select color ${color}`}
+                          aria-pressed={
+                            isSelected
+                          }
+                          title={color}
+                          onClick={() =>
+                            setSelectedEditorColor(
+                              color,
+                            )
+                          }
+                          className={[
+                            "h-8 w-8 shrink-0 rounded-full border-2 transition disabled:cursor-not-allowed disabled:opacity-50",
+
+                            isSelected
+                              ? "border-black ring-2 ring-black ring-offset-2"
+                              : "border-gray-950 hover:scale-105",
+                          ].join(
+                            " ",
+                          )}
+                          style={{
+                            backgroundColor:
+                              color,
+                          }}
+                        />
+                      );
+                    },
+                  )}
                 </div>
               ),
             )}
@@ -276,12 +341,18 @@ export default function BlockEditor() {
         <button
           type="button"
           disabled={isSaving}
-          onClick={handleSave}
+          onClick={
+            handleSave
+          }
           className="rounded-lg bg-black px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isSaving
-            ? "Saving..."
-            : "Done"}
+            ? isOrdinalVersion
+              ? "Minting..."
+              : "Saving..."
+            : isOrdinalVersion
+              ? "Save & Mint"
+              : "Done"}
         </button>
       </div>
     </aside>

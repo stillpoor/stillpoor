@@ -28,6 +28,7 @@ import {
 
 import {
   startEditorForExistingBlock,
+  startEditorForNewOrdinalVersion,
 } from "../lib/editor/editorState";
 
 import {
@@ -391,6 +392,25 @@ export default function BlockInspector({
       );
     };
 
+  const handleEditAndMintNewVersion =
+    () => {
+      if (
+        !occupiedBlock ||
+        !isOwnedByCurrentUser ||
+        occupiedBlock
+          .inscriptionPending ||
+        occupiedBlock
+          .latestInscriptionVersion <
+          1
+      ) {
+        return;
+      }
+
+      startEditorForNewOrdinalVersion(
+        block,
+      );
+    };
+
   const handleMintOrdinal =
     async () => {
       if (
@@ -619,11 +639,29 @@ export default function BlockInspector({
           )}
 
         {isOwnedByCurrentUser &&
-          hasConfirmedInscription && (
-            <p className="mt-5 rounded-lg bg-black/5 px-3 py-2 text-xs leading-5 text-black/55">
-              Further edits require a new
-              Ordinal version.
-            </p>
+          hasConfirmedInscription &&
+          !occupiedBlock
+            .inscriptionPending && (
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={
+                  handleEditAndMintNewVersion
+                }
+                className="w-full rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white"
+              >
+                Edit & Mint New Version
+              </button>
+
+              <p className="mt-2 text-xs leading-5 text-black/50">
+                Changes will create
+                Ordinal v
+                {occupiedBlock
+                  .latestInscriptionVersion +
+                  1}
+                .
+              </p>
+            </div>
           )}
 
         {mintError && (
