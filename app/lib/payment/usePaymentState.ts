@@ -19,6 +19,7 @@ const serverPaymentState: PaymentState = {
   orderId: null,
   expiresAt: null,
   paymentAddress: null,
+  receiverAddress: null,
 
   blocks: [],
   totalPriceSats: 0,

@@ -1,4 +1,6 @@
-import { NextResponse } from "next/server";
+import {
+  NextResponse,
+} from "next/server";
 
 import {
   getServerWalletSession,
@@ -52,15 +54,22 @@ function isBlockCoordinate(
     boardConfig.blockSize;
 
   return (
-    typeof coordinate.row === "number" &&
-    Number.isInteger(coordinate.row) &&
+    typeof coordinate.row ===
+      "number" &&
+    Number.isInteger(
+      coordinate.row,
+    ) &&
     coordinate.row >= 0 &&
     coordinate.row < rowCount &&
 
-    typeof coordinate.column === "number" &&
-    Number.isInteger(coordinate.column) &&
+    typeof coordinate.column ===
+      "number" &&
+    Number.isInteger(
+      coordinate.column,
+    ) &&
     coordinate.column >= 0 &&
-    coordinate.column < columnCount
+    coordinate.column <
+      columnCount
   );
 }
 
@@ -72,7 +81,8 @@ function getPublicBlockNumber(
     boardConfig.blockSize;
 
   return (
-    block.row * blocksPerRow +
+    block.row *
+      blocksPerRow +
     block.column +
     1
   );
@@ -82,23 +92,40 @@ function isNonEmptyString(
   value: unknown,
 ): value is string {
   return (
-    typeof value === "string" &&
+    typeof value ===
+      "string" &&
     value.trim().length > 0
   );
 }
 
-function isPositiveSafeInteger(
+function readPositiveSafeInteger(
   value: unknown,
-): value is number {
-  return (
-    typeof value === "number" &&
-    Number.isSafeInteger(value) &&
-    value > 0
-  );
+) {
+  const numberValue =
+    typeof value ===
+      "string"
+      ? Number(value)
+      : value;
+
+  if (
+    typeof numberValue !==
+      "number" ||
+    !Number.isSafeInteger(
+      numberValue,
+    ) ||
+    numberValue <= 0
+  ) {
+    return null;
+  }
+
+  return numberValue;
 }
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const runtime =
+  "nodejs";
+
+export const dynamic =
+  "force-dynamic";
 
 export async function POST(
   request: Request,
@@ -110,6 +137,7 @@ export async function POST(
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "A verified wallet session is required.",
       },
@@ -119,15 +147,18 @@ export async function POST(
     );
   }
 
-  let body: ReserveRequestBody;
+  let body:
+    ReserveRequestBody;
 
   try {
     body =
-      (await request.json()) as ReserveRequestBody;
+      (await request.json()) as
+        ReserveRequestBody;
   } catch {
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "The request body is invalid.",
       },
@@ -137,10 +168,15 @@ export async function POST(
     );
   }
 
-  if (!Array.isArray(body.blocks)) {
+  if (
+    !Array.isArray(
+      body.blocks,
+    )
+  ) {
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "A Block selection is required.",
       },
@@ -163,6 +199,7 @@ export async function POST(
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "One or more Block coordinates are invalid.",
       },
@@ -172,10 +209,13 @@ export async function POST(
     );
   }
 
-  if (blocks.length > 100) {
+  if (
+    blocks.length > 100
+  ) {
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "A maximum of 100 Blocks may be reserved.",
       },
@@ -191,7 +231,9 @@ export async function POST(
     );
 
   const uniqueBlockNumbers =
-    new Set(blockNumbers);
+    new Set(
+      blockNumbers,
+    );
 
   if (
     uniqueBlockNumbers.size !==
@@ -200,6 +242,7 @@ export async function POST(
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "The Block selection contains duplicates.",
       },
@@ -213,7 +256,7 @@ export async function POST(
     data,
     error,
   } = await supabaseAdmin.rpc(
-    "reserve_claim_blocks",
+    "reserve_claim_blocks_signet",
     {
       p_payment_address:
         session.paymentAddress,
@@ -225,7 +268,8 @@ export async function POST(
         blockNumbers,
 
       p_receiver_address:
-        paymentConfig.receiverAddress,
+        paymentConfig
+          .receiverAddress,
     },
   );
 
@@ -248,7 +292,8 @@ export async function POST(
     return NextResponse.json(
       {
         ok: false,
-        error: errorMessage,
+        error:
+          errorMessage,
       },
       {
         status:
@@ -268,6 +313,12 @@ export async function POST(
         )
       : undefined;
 
+  const amountSats =
+    readPositiveSafeInteger(
+      reservation
+        ?.amount_sats,
+    );
+
   if (
     !reservation ||
     !isNonEmptyString(
@@ -276,13 +327,12 @@ export async function POST(
     !isNonEmptyString(
       reservation.expires_at,
     ) ||
-    !isPositiveSafeInteger(
-      reservation.amount_sats,
-    )
+    amountSats === null
   ) {
     return NextResponse.json(
       {
         ok: false,
+
         error:
           "The reservation was created but returned invalid data.",
       },
@@ -302,8 +352,11 @@ export async function POST(
       expiresAt:
         reservation.expires_at,
 
-      amountSats:
-        reservation.amount_sats,
+      amountSats,
+
+      receiverAddress:
+        paymentConfig
+          .receiverAddress,
     },
     {
       headers: {

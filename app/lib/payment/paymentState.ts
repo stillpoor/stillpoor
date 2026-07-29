@@ -7,35 +7,50 @@ export interface PaymentState {
 
   orderId: string | null;
   expiresAt: string | null;
-  paymentAddress: string | null;
 
-  blocks: BlockCoordinate[];
-  totalPriceSats: number;
+  paymentAddress:
+    string | null;
+
+  receiverAddress:
+    string | null;
+
+  blocks:
+    BlockCoordinate[];
+
+  totalPriceSats:
+    number;
 }
 
-type PaymentListener = () => void;
+type PaymentListener =
+  () => void;
 
-const closedPaymentState: PaymentState = {
-  isOpen: false,
+const closedPaymentState:
+  PaymentState = {
+    isOpen: false,
 
-  orderId: null,
-  expiresAt: null,
-  paymentAddress: null,
+    orderId: null,
+    expiresAt: null,
 
-  blocks: [],
-  totalPriceSats: 0,
-};
+    paymentAddress: null,
+    receiverAddress: null,
 
-let paymentState: PaymentState =
-  closedPaymentState;
+    blocks: [],
+    totalPriceSats: 0,
+  };
+
+let paymentState:
+  PaymentState =
+    closedPaymentState;
 
 const listeners =
   new Set<PaymentListener>();
 
 function notifyListeners() {
-  listeners.forEach((listener) => {
-    listener();
-  });
+  listeners.forEach(
+    (listener) => {
+      listener();
+    },
+  );
 }
 
 export function getPaymentState() {
@@ -46,13 +61,19 @@ export function openPaymentModal({
   orderId,
   expiresAt,
   paymentAddress,
+  receiverAddress,
   blocks,
   totalPriceSats,
 }: {
   orderId: string;
   expiresAt: string;
+
   paymentAddress: string;
-  blocks: readonly BlockCoordinate[];
+  receiverAddress: string;
+
+  blocks:
+    readonly BlockCoordinate[];
+
   totalPriceSats: number;
 }) {
   paymentState = {
@@ -60,11 +81,16 @@ export function openPaymentModal({
 
     orderId,
     expiresAt,
-    paymentAddress,
 
-    blocks: blocks.map((block) => ({
-      ...block,
-    })),
+    paymentAddress,
+    receiverAddress,
+
+    blocks:
+      blocks.map(
+        (block) => ({
+          ...block,
+        }),
+      ),
 
     totalPriceSats,
   };
@@ -73,7 +99,9 @@ export function openPaymentModal({
 }
 
 export function closePaymentModal() {
-  if (!paymentState.isOpen) {
+  if (
+    !paymentState.isOpen
+  ) {
     return;
   }
 
@@ -84,11 +112,16 @@ export function closePaymentModal() {
 }
 
 export function subscribeToPayment(
-  listener: PaymentListener,
+  listener:
+    PaymentListener,
 ) {
-  listeners.add(listener);
+  listeners.add(
+    listener,
+  );
 
   return () => {
-    listeners.delete(listener);
+    listeners.delete(
+      listener,
+    );
   };
 }

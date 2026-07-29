@@ -6,12 +6,12 @@ import {
 } from "react";
 
 import {
-  completeSimulatedClaimPurchase,
+  completeClaimPurchase,
 } from "../lib/claim/claimPurchase";
 
 import {
   cancelClaimOrder,
-  confirmSimulatedClaimOrder,
+  confirmPaidClaimOrder,
 } from "../lib/payment/paymentApi";
 
 import {
@@ -19,8 +19,22 @@ import {
 } from "../lib/payment/paymentState";
 
 import {
+  sendSignetPayment,
+  SignetPaymentError,
+} from "../lib/payment/signetPayment";
+
+import {
+  formatBitcoinTransactionId,
+  getBitcoinTransactionExplorerUrl,
+} from "../lib/payment/transactionExplorer";
+
+import {
   usePaymentState,
 } from "../lib/payment/usePaymentState";
+
+import type {
+  Block,
+} from "../lib/board/boardTypes";
 
 function formatBtcFromSats(
   sats: number,
@@ -32,10 +46,17 @@ function formatBtcFromSats(
 
   const fractionalBtc =
     String(
-      sats % 100_000_000,
+      sats %
+        100_000_000,
     )
-      .padStart(8, "0")
-      .replace(/0+$/, "");
+      .padStart(
+        8,
+        "0",
+      )
+      .replace(
+        /0+$/,
+        "",
+      );
 
   return fractionalBtc
     ? `${wholeBtc}.${fractionalBtc} BTC`
@@ -51,7 +72,9 @@ function formatExpiryTime(
       hour: "2-digit",
       minute: "2-digit",
     },
-  ).format(new Date(date));
+  ).format(
+    new Date(date),
+  );
 }
 
 export default function PaymentModal() {
@@ -61,11 +84,32 @@ export default function PaymentModal() {
   const [
     errorMessage,
     setErrorMessage,
-  ] = useState<string | null>(null);
+  ] = useState<string | null>(
+    null,
+  );
 
   const [
-    isConfirming,
-    setIsConfirming,
+    paymentTxid,
+    setPaymentTxid,
+  ] = useState<string | null>(
+    null,
+  );
+
+  const [
+    verifiedClaimedBlocks,
+    setVerifiedClaimedBlocks,
+  ] = useState<Block[] | null>(
+    null,
+  );
+
+  const [
+    isSending,
+    setIsSending,
+  ] = useState(false);
+
+  const [
+    isVerifying,
+    setIsVerifying,
   ] = useState(false);
 
   const [
@@ -73,66 +117,188 @@ export default function PaymentModal() {
     setIsCancelling,
   ] = useState(false);
 
+  const [
+    isOpeningEditor,
+    setIsOpeningEditor,
+  ] = useState(false);
+
+  const [
+    isReservationReleased,
+    setIsReservationReleased,
+  ] = useState(false);
+
+  const [
+    isPaymentStatusUncertain,
+    setIsPaymentStatusUncertain,
+  ] = useState(false);
+
   useEffect(() => {
-    if (!paymentState.isOpen) {
+    if (
+      !paymentState.isOpen
+    ) {
       return;
     }
 
     setErrorMessage(null);
-    setIsConfirming(false);
-    setIsCancelling(false);
-  }, [paymentState.isOpen]);
+    setPaymentTxid(null);
 
-  if (!paymentState.isOpen) {
+    setVerifiedClaimedBlocks(
+      null,
+    );
+
+    setIsSending(false);
+    setIsVerifying(false);
+    setIsCancelling(false);
+    setIsOpeningEditor(false);
+
+    setIsReservationReleased(
+      false,
+    );
+
+    setIsPaymentStatusUncertain(
+      false,
+    );
+  }, [
+    paymentState.isOpen,
+    paymentState.orderId,
+  ]);
+
+  if (
+    !paymentState.isOpen
+  ) {
     return null;
   }
 
   const blockCount =
     paymentState.blocks.length;
 
-  const handleCancel = async () => {
-    if (
-      !paymentState.orderId ||
-      !paymentState.paymentAddress
-    ) {
-      closePaymentModal();
-      return;
-    }
+  const isPaymentConfirmed =
+    Boolean(
+      verifiedClaimedBlocks,
+    );
 
-    setErrorMessage(null);
-    setIsCancelling(true);
+  const paymentTransactionUrl =
+    paymentTxid
+      ? getBitcoinTransactionExplorerUrl(
+          paymentTxid,
+        )
+      : null;
 
-    try {
-      await cancelClaimOrder({
-        orderId:
-          paymentState.orderId,
+  const handleCancel =
+    async () => {
+      if (
+        isReservationReleased ||
+        isPaymentStatusUncertain
+      ) {
+        closePaymentModal();
 
-        paymentAddress:
-          paymentState.paymentAddress,
-      });
+        return;
+      }
 
-      /*
-       * La sélection locale reste active.
-       * L’utilisateur peut modifier sa sélection
-       * et réessayer.
-       */
-      closePaymentModal();
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to cancel the reservation.",
-      );
-    } finally {
-      setIsCancelling(false);
-    }
-  };
+      if (
+        paymentTxid ||
+        isPaymentConfirmed
+      ) {
+        return;
+      }
 
-  const handleConfirmPayment =
+      if (
+        !paymentState.orderId ||
+        !paymentState
+          .paymentAddress
+      ) {
+        closePaymentModal();
+
+        return;
+      }
+
+      setErrorMessage(null);
+      setIsCancelling(true);
+
+      try {
+        await cancelClaimOrder({
+          orderId:
+            paymentState.orderId,
+
+          paymentAddress:
+            paymentState
+              .paymentAddress,
+        });
+
+        closePaymentModal();
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to cancel the reservation.",
+        );
+      } finally {
+        setIsCancelling(
+          false,
+        );
+      }
+    };
+
+  const releaseFailedPaymentReservation =
+    async (
+      paymentErrorMessage:
+        string,
+    ) => {
+      if (
+        !paymentState.orderId ||
+        !paymentState
+          .paymentAddress
+      ) {
+        setErrorMessage(
+          paymentErrorMessage,
+        );
+
+        return;
+      }
+
+      setIsCancelling(true);
+
+      try {
+        await cancelClaimOrder({
+          orderId:
+            paymentState.orderId,
+
+          paymentAddress:
+            paymentState
+              .paymentAddress,
+        });
+
+        setIsReservationReleased(
+          true,
+        );
+
+        setErrorMessage(
+          `${paymentErrorMessage} No payment was sent, so the Block reservation was released.`,
+        );
+      } catch (error) {
+        const cancellationMessage =
+          error instanceof Error
+            ? error.message
+            : "Unable to release the reservation.";
+
+        setErrorMessage(
+          `${paymentErrorMessage} The reservation could not be released automatically: ${cancellationMessage}`,
+        );
+      } finally {
+        setIsCancelling(
+          false,
+        );
+      }
+    };
+
+  const handlePayment =
     async () => {
       if (
         !paymentState.orderId ||
-        !paymentState.paymentAddress
+        !paymentState
+          .paymentAddress ||
+        !paymentState
+          .receiverAddress
       ) {
         setErrorMessage(
           "The Claim reservation is invalid.",
@@ -142,43 +308,160 @@ export default function PaymentModal() {
       }
 
       setErrorMessage(null);
-      setIsConfirming(true);
+
+      let currentPaymentTxid =
+        paymentTxid;
 
       try {
+        if (
+          !currentPaymentTxid
+        ) {
+          setIsSending(true);
+
+          currentPaymentTxid =
+            await sendSignetPayment({
+              receiverAddress:
+                paymentState
+                  .receiverAddress,
+
+              amountSats:
+                paymentState
+                  .totalPriceSats,
+            });
+
+          setPaymentTxid(
+            currentPaymentTxid,
+          );
+
+          setIsSending(false);
+        }
+
+        setIsVerifying(true);
+
         const claimedBlocks =
-          await confirmSimulatedClaimOrder({
+          await confirmPaidClaimOrder({
             orderId:
               paymentState.orderId,
 
-            paymentAddress:
-              paymentState.paymentAddress,
+            paymentTxid:
+              currentPaymentTxid,
           });
 
-        const purchaseCompleted =
-          completeSimulatedClaimPurchase(
-            claimedBlocks,
-          );
+        /*
+         * The payment is now confirmed,
+         * but the Editor is not opened yet.
+         * The success state remains visible
+         * until the user continues manually.
+         */
+        setVerifiedClaimedBlocks(
+          claimedBlocks,
+        );
 
-        if (!purchaseCompleted) {
-          throw new Error(
-            "The confirmed Blocks could not be opened in the Editor.",
-          );
-        }
-
-        closePaymentModal();
+        setErrorMessage(null);
       } catch (error) {
-        setErrorMessage(
+        const message =
           error instanceof Error
             ? error.message
-            : "The payment could not be confirmed.",
+            : "The payment could not be completed.";
+
+        if (
+          currentPaymentTxid
+        ) {
+          setErrorMessage(
+            `Payment sent. ${message}`,
+          );
+
+          return;
+        }
+
+        if (
+          error instanceof
+            SignetPaymentError &&
+          !error
+            .paymentMayHaveBeenSent
+        ) {
+          await releaseFailedPaymentReservation(
+            message,
+          );
+
+          return;
+        }
+
+        /*
+         * We do not know whether a transaction
+         * was broadcast. Releasing the Block
+         * could allow it to be sold twice.
+         */
+        setIsPaymentStatusUncertain(
+          true,
+        );
+
+        setErrorMessage(
+          `${message} The reservation was kept because the payment status is uncertain.`,
         );
       } finally {
-        setIsConfirming(false);
+        setIsSending(false);
+        setIsVerifying(false);
       }
     };
 
+  const handleStartCreating =
+    () => {
+      if (
+        !verifiedClaimedBlocks ||
+        verifiedClaimedBlocks.length ===
+          0 ||
+        isOpeningEditor
+      ) {
+        return;
+      }
+
+      setErrorMessage(null);
+      setIsOpeningEditor(true);
+
+      const purchaseCompleted =
+        completeClaimPurchase(
+          verifiedClaimedBlocks,
+        );
+
+      if (
+        !purchaseCompleted
+      ) {
+        setErrorMessage(
+          "Your payment was confirmed, but the Blocks could not be opened in the Editor.",
+        );
+
+        setIsOpeningEditor(false);
+
+        return;
+      }
+
+      closePaymentModal();
+    };
+
   const isProcessing =
-    isConfirming || isCancelling;
+    isSending ||
+    isVerifying ||
+    isCancelling ||
+    isOpeningEditor;
+
+  let paymentButtonText =
+    "Pay with Xverse";
+
+  if (isSending) {
+    paymentButtonText =
+      "Open Xverse...";
+  } else if (
+    isVerifying
+  ) {
+    paymentButtonText =
+      "Verifying...";
+  } else if (
+    paymentTxid
+  ) {
+    paymentButtonText =
+      "Verify payment";
+  }
 
   return (
     <div
@@ -188,21 +471,60 @@ export default function PaymentModal() {
       className="pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
     >
       <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
-        <h2
-          id="payment-modal-title"
-          className="text-lg font-semibold"
-        >
-          Complete payment
-        </h2>
+        {isPaymentConfirmed ? (
+          <>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+              <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                className="h-5 w-5"
+              >
+                <path
+                  d="M5 12.5l4 4L19 7"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.25"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
 
-        <p className="mt-2 text-sm text-gray-500">
-          Your Blocks are temporarily reserved.
-        </p>
+            <h2
+              id="payment-modal-title"
+              className="mt-4 text-lg font-semibold"
+            >
+              Payment confirmed
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-gray-500">
+              {blockCount === 1
+                ? "Your Block is officially yours. You can now leave your mark on the Board."
+                : "Your Blocks are officially yours. You can now leave your mark on the Board."}
+            </p>
+          </>
+        ) : (
+          <>
+            <h2
+              id="payment-modal-title"
+              className="text-lg font-semibold"
+            >
+              Complete payment
+            </h2>
+
+            <p className="mt-2 text-sm text-gray-500">
+              Your Blocks are
+              temporarily reserved.
+            </p>
+          </>
+        )}
 
         <dl className="mt-6 space-y-4 border-y border-gray-200 py-5 text-sm">
           <div className="flex items-center justify-between gap-4">
             <dt className="text-gray-500">
-              Selected
+              {isPaymentConfirmed
+                ? "Claimed"
+                : "Selected"}
             </dt>
 
             <dd className="font-medium">
@@ -220,31 +542,97 @@ export default function PaymentModal() {
 
             <dd className="font-semibold">
               {formatBtcFromSats(
-                paymentState.totalPriceSats,
+                paymentState
+                  .totalPriceSats,
               )}
             </dd>
           </div>
 
-          {paymentState.expiresAt && (
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-gray-500">
+              Network
+            </dt>
+
+            <dd className="font-semibold">
+              Signet
+            </dd>
+          </div>
+
+          {!isPaymentConfirmed &&
+            paymentState
+              .expiresAt && (
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-gray-500">
+                  Reserved until
+                </dt>
+
+                <dd className="font-medium">
+                  {formatExpiryTime(
+                    paymentState
+                      .expiresAt,
+                  )}
+                </dd>
+              </div>
+            )}
+
+          {paymentTxid && (
             <div className="flex items-center justify-between gap-4">
               <dt className="text-gray-500">
-                Reserved until
+                Transaction
               </dt>
 
-              <dd className="font-medium">
-                {formatExpiryTime(
-                  paymentState.expiresAt,
+              <dd className="text-right">
+                {paymentTransactionUrl ? (
+                  <a
+                    href={
+                      paymentTransactionUrl
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={paymentTxid}
+                    className="inline-flex items-center gap-1 font-mono text-xs font-medium underline decoration-black/20 underline-offset-2 transition hover:decoration-black"
+                  >
+                    {formatBitcoinTransactionId(
+                      paymentTxid,
+                    )}
+
+                    <span
+                      aria-hidden="true"
+                      className="font-sans"
+                    >
+                      ↗
+                    </span>
+                  </a>
+                ) : (
+                  <span className="font-mono text-xs font-medium">
+                    {formatBitcoinTransactionId(
+                      paymentTxid,
+                    )}
+                  </span>
                 )}
               </dd>
             </div>
           )}
         </dl>
 
-        <div className="mt-5 rounded-lg bg-gray-100 p-4 text-sm text-gray-600">
-          Bitcoin payment is still simulated.
-          Confirming will permanently claim the
-          reserved Blocks in Supabase.
-        </div>
+        {isPaymentConfirmed ? (
+          <div className="mt-5 rounded-lg bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
+            Payment verified on
+            Signet. Your purchase is
+            now recorded permanently
+            in StillPoor.
+          </div>
+        ) : (
+          <div className="mt-5 rounded-lg bg-gray-100 p-4 text-sm leading-5 text-gray-600">
+            {isReservationReleased
+              ? "No payment was sent. Your Block selection remains active and can be reserved again."
+              : isPaymentStatusUncertain
+                ? "The reservation remains active to prevent the Block from being sold twice."
+                : paymentTxid
+                  ? "The Signet transaction was sent. StillPoor is now verifying it."
+                  : "Xverse will display the Signet recipient, payment amount and network fee before sending."}
+          </div>
+        )}
 
         {errorMessage && (
           <p
@@ -255,31 +643,73 @@ export default function PaymentModal() {
           </p>
         )}
 
-        <div className="mt-6 flex gap-2">
-          <button
-            type="button"
-            onClick={handleCancel}
-            disabled={isProcessing}
-            className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {isCancelling
-              ? "Cancelling..."
-              : "Cancel"}
-          </button>
-
+        {isPaymentConfirmed ? (
           <button
             type="button"
             onClick={
-              handleConfirmPayment
+              handleStartCreating
             }
-            disabled={isProcessing}
-            className="flex-1 rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={
+              isProcessing
+            }
+            className="mt-6 w-full rounded-lg bg-gray-950 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {isConfirming
-              ? "Confirming..."
-              : "Confirm payment"}
+            {isOpeningEditor
+              ? "Opening Editor..."
+              : "Start creating"}
           </button>
-        </div>
+        ) : isReservationReleased ||
+          isPaymentStatusUncertain ? (
+          <button
+            type="button"
+            onClick={
+              closePaymentModal
+            }
+            disabled={
+              isProcessing
+            }
+            className="mt-6 w-full rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Back to selection
+          </button>
+        ) : (
+          <div className="mt-6 flex gap-2">
+            <button
+              type="button"
+              onClick={
+                handleCancel
+              }
+              disabled={
+                isProcessing ||
+                Boolean(
+                  paymentTxid,
+                )
+              }
+              className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {paymentTxid
+                ? "Payment sent"
+                : isCancelling
+                  ? "Cancelling..."
+                  : "Cancel"}
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                handlePayment
+              }
+              disabled={
+                isProcessing
+              }
+              className="flex-1 rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {
+                paymentButtonText
+              }
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

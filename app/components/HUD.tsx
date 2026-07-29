@@ -44,9 +44,8 @@ export default function HUD() {
   const handleOpenAbout =
     () => {
       /*
-       * About est un overlay indépendant.
-       * Les menus ouverts en dessous
-       * conservent leur état.
+       * About is an independent overlay.
+       * Menus underneath keep their state.
        */
       setIsAboutOpen(true);
     };
@@ -62,9 +61,8 @@ export default function HUD() {
 
       if (shouldOpen) {
         /*
-         * WalletButton écoute déjà cet
-         * événement et ferme le menu Profile
-         * lorsqu’un autre panneau s’ouvre.
+         * WalletButton listens to this event
+         * and closes the Profile menu.
          */
         window.dispatchEvent(
           new CustomEvent(
@@ -82,7 +80,7 @@ export default function HUD() {
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
-      <div className="pointer-events-auto absolute top-8 left-8">
+      <div className="pointer-events-none absolute top-8 left-8">
         <div className="flex flex-col items-start gap-5">
           <Image
             src="/stillpoor-logo.svg"
@@ -90,25 +88,27 @@ export default function HUD() {
             width={396}
             height={123}
             priority
-            className="h-[32px] w-auto"
+            className="pointer-events-none h-[32px] w-auto"
           />
 
-          <BoardStatsHUD />
+          <div className="pointer-events-auto">
+            <BoardStatsHUD />
+          </div>
         </div>
       </div>
 
-      <div className="pointer-events-auto absolute top-8 right-8 flex items-start gap-2">
+      <div className="pointer-events-none absolute top-8 right-8 flex items-start gap-2">
         <button
           type="button"
           onClick={
             handleOpenAbout
           }
-          className="rounded-lg border border-black/10 bg-white/95 px-4 py-2 text-sm font-medium text-black shadow-sm backdrop-blur-md transition hover:bg-white"
+          className="pointer-events-auto rounded-lg border border-black/10 bg-white/95 px-4 py-2 text-sm font-medium text-black shadow-sm backdrop-blur-md transition hover:bg-white"
         >
           About
         </button>
 
-        <div className="relative">
+        <div className="pointer-events-none relative">
           <button
             type="button"
             onClick={
@@ -118,24 +118,27 @@ export default function HUD() {
               isActivityOpen
             }
             aria-haspopup="dialog"
-            className="rounded-lg border border-black/10 bg-white/95 px-4 py-2 text-sm font-medium text-black shadow-sm backdrop-blur-md transition hover:bg-white"
+            className="pointer-events-auto rounded-lg border border-black/10 bg-white/95 px-4 py-2 text-sm font-medium text-black shadow-sm backdrop-blur-md transition hover:bg-white"
           >
             Activity
           </button>
 
-          <ActivityMenu
-            isOpen={
-              isActivityOpen
-            }
-            onClose={() =>
-              setIsActivityOpen(
-                false,
-              )
-            }
-          />
+          <div className="pointer-events-auto">
+            <ActivityMenu
+              isOpen={
+                isActivityOpen
+              }
+              onClose={() =>
+                setIsActivityOpen(
+                  false,
+                )
+              }
+            />
+          </div>
         </div>
 
         <div
+          className="pointer-events-auto"
           onClickCapture={() =>
             setIsActivityOpen(
               false,

@@ -1,4 +1,7 @@
-import { boardConfig } from "../board/boardConfig";
+import {
+  boardConfig,
+} from "../board/boardConfig";
+
 import {
   getBlockKey,
   setBlock,
@@ -16,6 +19,7 @@ import type {
   Block,
   BlockCoordinate,
 } from "../board/boardTypes";
+
 import type {
   BlockDraft,
 } from "../editor/editorTypes";
@@ -28,34 +32,43 @@ function getPublicBlockNumber(
     boardConfig.blockSize;
 
   return (
-    block.row * blocksPerRow +
+    block.row *
+      blocksPerRow +
     block.column +
     1
   );
 }
 
-export function completeSimulatedClaimPurchase(
-  claimedBlocks: readonly Block[],
+export function completeClaimPurchase(
+  claimedBlocks:
+    readonly Block[],
 ) {
-  if (claimedBlocks.length === 0) {
+  if (
+    claimedBlocks.length === 0
+  ) {
     return false;
   }
 
   const purchasedBlocks =
     claimedBlocks
-      .map((block) => ({
-        ...block,
+      .map(
+        (block) => ({
+          ...block,
 
-        coordinate: {
-          ...block.coordinate,
-        },
+          coordinate: {
+            ...block.coordinate,
+          },
 
-        pixels: [
-          ...block.pixels,
-        ],
-      }))
+          pixels: [
+            ...block.pixels,
+          ],
+        }),
+      )
       .sort(
-        (firstBlock, secondBlock) =>
+        (
+          firstBlock,
+          secondBlock,
+        ) =>
           getPublicBlockNumber(
             firstBlock.coordinate,
           ) -
@@ -65,23 +78,33 @@ export function completeSimulatedClaimPurchase(
       );
 
   const drafts =
-    new Map<string, BlockDraft>();
+    new Map<
+      string,
+      BlockDraft
+    >();
 
-  purchasedBlocks.forEach((block) => {
-    setBlock(block);
+  purchasedBlocks.forEach(
+    (block) => {
+      setBlock(
+        block,
+      );
 
-    drafts.set(
-      getBlockKey(block.coordinate),
-      {
-        pixels: [
-          ...block.pixels,
-        ],
+      drafts.set(
+        getBlockKey(
+          block.coordinate,
+        ),
+        {
+          pixels: [
+            ...block.pixels,
+          ],
 
-        description:
-          block.description ?? "",
-      },
-    );
-  });
+          description:
+            block.description ??
+            "",
+        },
+      );
+    },
+  );
 
   cancelClaim();
 

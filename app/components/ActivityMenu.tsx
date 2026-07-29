@@ -685,16 +685,18 @@ export default function ActivityMenu({
                     className="flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-black/5"
                   >
                     <BlockThumbnail
-  block={{
-    pixels:
-      activity.pixels,
+                      block={{
+                        pixels:
+                          activity.pixels,
 
-    latestInscriptionVersion:
-      activity.type === "ordinal"
-        ? activity.latestInscriptionVersion
-        : 0,
-  }}
-/>
+                        latestInscriptionVersion:
+                          activity.type ===
+                          "ordinal"
+                            ? activity
+                                .latestInscriptionVersion
+                            : 0,
+                      }}
+                    />
 
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-semibold text-black">

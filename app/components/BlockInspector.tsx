@@ -65,6 +65,11 @@ import {
   useWalletState,
 } from "../lib/wallet/useWalletState";
 
+import {
+  formatBitcoinTransactionId,
+  getBitcoinTransactionExplorerUrl,
+} from "../lib/payment/transactionExplorer";
+
 import type {
   BlockCoordinate,
 } from "../lib/board/boardTypes";
@@ -598,6 +603,9 @@ export default function BlockInspector({
 
           paymentAddress,
 
+          receiverAddress:
+            reservation.receiverAddress,
+
           blocks:
             claimState.blocks,
 
@@ -726,7 +734,13 @@ export default function BlockInspector({
     };
 
   if (occupiedBlock) {
-    const displayedDescription =
+  const claimTransactionUrl =
+    getBitcoinTransactionExplorerUrl(
+      occupiedBlock
+        .claimTransactionId,
+    );
+
+  const displayedDescription =
       selectedOrdinalVersion
         ?.description ??
       occupiedBlock.description;
@@ -802,17 +816,46 @@ export default function BlockInspector({
           </div>
 
           <div>
-            <dt className="text-gray-500">
-              Claim transaction
-            </dt>
+  <dt className="text-gray-500">
+    Claim transaction
+  </dt>
 
-            <dd className="mt-1 break-all font-mono text-xs">
-              {
-                occupiedBlock
-                  .claimTransactionId
-              }
-            </dd>
-          </div>
+  <dd className="mt-1">
+    {claimTransactionUrl ? (
+      <a
+        href={
+          claimTransactionUrl
+        }
+        target="_blank"
+        rel="noopener noreferrer"
+        title={
+          occupiedBlock
+            .claimTransactionId
+        }
+        className="inline-flex items-center gap-1 font-mono text-xs font-medium underline decoration-black/20 underline-offset-2 transition hover:decoration-black"
+      >
+        {formatBitcoinTransactionId(
+          occupiedBlock
+            .claimTransactionId,
+        )}
+
+        <span
+          aria-hidden="true"
+          className="font-sans"
+        >
+          ↗
+        </span>
+      </a>
+    ) : (
+      <span className="break-all font-mono text-xs">
+        {
+          occupiedBlock
+            .claimTransactionId
+        }
+      </span>
+    )}
+  </dd>
+</div>
 
           {occupiedBlock
             .inscriptionPending && (
