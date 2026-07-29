@@ -12,16 +12,26 @@ import {
 import {
   cancelClaimOrder,
   confirmPaidClaimOrder,
+  releaseAbandonedUnpaidClaimReservation,
 } from "../lib/payment/paymentApi";
+
+import {
+  BitcoinPaymentError,
+  sendBitcoinPayment,
+} from "../lib/payment/bitcoinPayment";
+
+import {
+  paymentConfig,
+} from "../lib/payment/paymentConfig";
+
+import {
+  markClaimPaymentStarted,
+  storeClaimPaymentTransaction,
+} from "../lib/payment/paymentReservationSession";
 
 import {
   closePaymentModal,
 } from "../lib/payment/paymentState";
-
-import {
-  sendSignetPayment,
-  SignetPaymentError,
-} from "../lib/payment/signetPayment";
 
 import {
   formatBitcoinTransactionId,
@@ -131,6 +141,22 @@ export default function PaymentModal() {
     isPaymentStatusUncertain,
     setIsPaymentStatusUncertain,
   ] = useState(false);
+
+  /*
+   * A reservation that was created but never
+   * reached Xverse is safe to release after a
+   * refresh. Reservations whose payment started
+   * are deliberately kept.
+   */
+  useEffect(() => {
+    void releaseAbandonedUnpaidClaimReservation()
+      .catch((error) => {
+        console.warn(
+          "Unable to release the abandoned unpaid Claim reservation:",
+          error,
+        );
+      });
+  }, []);
 
   useEffect(() => {
     if (
@@ -316,10 +342,20 @@ export default function PaymentModal() {
         if (
           !currentPaymentTxid
         ) {
+          /*
+           * From this point onward, a transaction
+           * could potentially be broadcast. A
+           * refresh must no longer auto-cancel
+           * the reservation.
+           */
+          markClaimPaymentStarted(
+            paymentState.orderId,
+          );
+
           setIsSending(true);
 
           currentPaymentTxid =
-            await sendSignetPayment({
+            await sendBitcoinPayment({
               receiverAddress:
                 paymentState
                   .receiverAddress,
@@ -328,6 +364,14 @@ export default function PaymentModal() {
                 paymentState
                   .totalPriceSats,
             });
+
+          storeClaimPaymentTransaction({
+            orderId:
+              paymentState.orderId,
+
+            paymentTxid:
+              currentPaymentTxid,
+          });
 
           setPaymentTxid(
             currentPaymentTxid,
@@ -347,12 +391,6 @@ export default function PaymentModal() {
               currentPaymentTxid,
           });
 
-        /*
-         * The payment is now confirmed,
-         * but the Editor is not opened yet.
-         * The success state remains visible
-         * until the user continues manually.
-         */
         setVerifiedClaimedBlocks(
           claimedBlocks,
         );
@@ -376,7 +414,7 @@ export default function PaymentModal() {
 
         if (
           error instanceof
-            SignetPaymentError &&
+            BitcoinPaymentError &&
           !error
             .paymentMayHaveBeenSent
         ) {
@@ -387,11 +425,6 @@ export default function PaymentModal() {
           return;
         }
 
-        /*
-         * We do not know whether a transaction
-         * was broadcast. Releasing the Block
-         * could allow it to be sold twice.
-         */
         setIsPaymentStatusUncertain(
           true,
         );
@@ -554,7 +587,10 @@ export default function PaymentModal() {
             </dt>
 
             <dd className="font-semibold">
-              Signet
+              {
+                paymentConfig
+                  .networkLabel
+              }
             </dd>
           </div>
 
@@ -617,10 +653,13 @@ export default function PaymentModal() {
 
         {isPaymentConfirmed ? (
           <div className="mt-5 rounded-lg bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
-            Payment verified on
-            Signet. Your purchase is
-            now recorded permanently
-            in StillPoor.
+            Payment verified on{" "}
+            {
+              paymentConfig
+                .networkLabel
+            }
+            . Your purchase is now
+            confirmed in StillPoor.
           </div>
         ) : (
           <div className="mt-5 rounded-lg bg-gray-100 p-4 text-sm leading-5 text-gray-600">
@@ -629,8 +668,8 @@ export default function PaymentModal() {
               : isPaymentStatusUncertain
                 ? "The reservation remains active to prevent the Block from being sold twice."
                 : paymentTxid
-                  ? "The Signet transaction was sent. StillPoor is now verifying it."
-                  : "Xverse will display the Signet recipient, payment amount and network fee before sending."}
+                  ? `The ${paymentConfig.networkLabel} transaction was sent. StillPoor is now verifying it.`
+                  : `Xverse will display the ${paymentConfig.networkLabel} recipient, payment amount and network fee before sending.`}
           </div>
         )}
 

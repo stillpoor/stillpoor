@@ -1,7 +1,6 @@
-const bitcoinNetwork:
-  | "signet"
-  | "mainnet" =
-  "signet";
+import {
+  paymentConfig,
+} from "./paymentConfig";
 
 const transactionIdPattern =
   /^[0-9a-fA-F]{64}$/;
@@ -22,12 +21,7 @@ export function getBitcoinTransactionExplorerUrl(
     return null;
   }
 
-  const baseUrl =
-    bitcoinNetwork === "signet"
-      ? "https://mempool.space/signet/tx"
-      : "https://mempool.space/tx";
-
-  return `${baseUrl}/${normalizedTransactionId}`;
+  return `${paymentConfig.transactionExplorerBaseUrl}/${normalizedTransactionId}`;
 }
 
 export function formatBitcoinTransactionId(

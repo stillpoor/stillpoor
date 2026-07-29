@@ -256,7 +256,7 @@ export async function POST(
     data,
     error,
   } = await supabaseAdmin.rpc(
-    "reserve_claim_blocks_signet",
+    "reserve_claim_blocks_paid",
     {
       p_payment_address:
         session.paymentAddress,
@@ -270,6 +270,13 @@ export async function POST(
       p_receiver_address:
         paymentConfig
           .receiverAddress,
+
+      p_payment_network:
+        paymentConfig.network,
+
+      p_signet_amount_sats_per_block:
+        paymentConfig
+          .signetAmountSatsPerBlock,
     },
   );
 

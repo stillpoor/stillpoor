@@ -142,11 +142,11 @@ function wait(
   );
 }
 
-async function loadSignetTransaction(
+async function loadBitcoinTransaction(
   transactionId: string,
 ) {
   const url =
-    `https://mempool.space/signet/api/tx/${transactionId}`;
+    `${paymentConfig.mempoolApiBaseUrl}/tx/${transactionId}`;
 
   for (
     let attempt = 0;
@@ -177,13 +177,13 @@ async function loadSignetTransaction(
       response.status === 429
     ) {
       throw new Error(
-        "The Signet explorer is temporarily rate limited.",
+        `The ${paymentConfig.networkLabel} explorer is temporarily rate limited.`,
       );
     }
 
     if (!response.ok) {
       throw new Error(
-        "The Signet explorer could not verify the transaction.",
+        `The ${paymentConfig.networkLabel} explorer could not verify the transaction.`,
       );
     }
 
@@ -417,14 +417,14 @@ export async function POST(
 
   if (
     order.payment_network !==
-    "signet"
+    paymentConfig.network
   ) {
     return NextResponse.json(
       {
         ok: false,
 
         error:
-          "The Claim order is not a Signet order.",
+          `The Claim order is not a ${paymentConfig.networkLabel} order.`,
       },
       {
         status: 400,
@@ -494,7 +494,7 @@ export async function POST(
 
   try {
     transaction =
-      await loadSignetTransaction(
+      await loadBitcoinTransaction(
         paymentTxid,
       );
   } catch (error) {
@@ -505,7 +505,7 @@ export async function POST(
         error:
           error instanceof Error
             ? error.message
-            : "The Signet payment could not be verified.",
+            : `The ${paymentConfig.networkLabel} payment could not be verified.`,
       },
       {
         status: 503,
@@ -519,7 +519,7 @@ export async function POST(
         ok: false,
 
         error:
-          "The transaction is not visible on Signet yet. Try verifying it again.",
+          `The transaction is not visible on ${paymentConfig.networkLabel} yet. Try verifying it again.`,
       },
       {
         status: 425,
@@ -542,7 +542,7 @@ export async function POST(
         ok: false,
 
         error:
-          "The Signet transaction returned invalid data.",
+          `The ${paymentConfig.networkLabel} transaction returned invalid data.`,
       },
       {
         status: 502,

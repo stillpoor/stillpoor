@@ -3,6 +3,12 @@ import type {
   BlockCoordinate,
 } from "../board/boardTypes";
 
+import {
+  clearStoredClaimPaymentSession,
+  getAbandonedUnpaidClaimPaymentSession,
+  storeReservedClaimPaymentSession,
+} from "./paymentReservationSession";
+
 interface ErrorResponse {
   ok?: false;
   error?: string;
@@ -61,6 +67,9 @@ interface ConfirmPaidOrderOptions {
   orderId: string;
   paymentTxid: string;
 }
+
+let abandonedReservationReleasePromise:
+  Promise<void> | null = null;
 
 function refreshBoardStats() {
   if (
@@ -160,6 +169,14 @@ export async function reserveClaimOrder(
     );
   }
 
+  storeReservedClaimPaymentSession({
+    orderId:
+      reservation.orderId,
+
+    paymentAddress:
+      options.paymentAddress,
+  });
+
   refreshBoardStats();
 
   return {
@@ -209,6 +226,27 @@ export async function cancelClaimOrder(
     );
 
   if (!response.ok) {
+    /*
+     * In these cases the order can no longer
+     * hold an active reservation. The local
+     * recovery record is therefore no longer
+     * useful.
+     */
+    if (
+      response.status ===
+        404 ||
+      response.status ===
+        409 ||
+      response.status ===
+        410
+    ) {
+      clearStoredClaimPaymentSession(
+        options.orderId,
+      );
+
+      refreshBoardStats();
+    }
+
     throw new Error(
       getResponseError(
         data,
@@ -223,10 +261,46 @@ export async function cancelClaimOrder(
       CancelResponse;
 
   if (result.ok) {
+    clearStoredClaimPaymentSession(
+      options.orderId,
+    );
+
     refreshBoardStats();
   }
 
   return result.ok;
+}
+
+export async function releaseAbandonedUnpaidClaimReservation() {
+  if (
+    abandonedReservationReleasePromise
+  ) {
+    return abandonedReservationReleasePromise;
+  }
+
+  const abandonedSession =
+    getAbandonedUnpaidClaimPaymentSession();
+
+  if (!abandonedSession) {
+    return;
+  }
+
+  abandonedReservationReleasePromise =
+    cancelClaimOrder({
+      orderId:
+        abandonedSession.orderId,
+
+      paymentAddress:
+        abandonedSession
+          .paymentAddress,
+    })
+      .then(() => undefined)
+      .finally(() => {
+        abandonedReservationReleasePromise =
+          null;
+      });
+
+  return abandonedReservationReleasePromise;
 }
 
 export async function confirmPaidClaimOrder(
@@ -270,7 +344,7 @@ export async function confirmPaidClaimOrder(
       getResponseError(
         data,
 
-        "The Signet payment could not be verified.",
+        "The Bitcoin payment could not be verified.",
       ),
     );
   }
@@ -278,6 +352,10 @@ export async function confirmPaidClaimOrder(
   const result =
     data as unknown as
       ConfirmResponse;
+
+  clearStoredClaimPaymentSession(
+    options.orderId,
+  );
 
   refreshBoardStats();
 

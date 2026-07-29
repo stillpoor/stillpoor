@@ -4,8 +4,13 @@ import {
 
 import {
   AddressPurpose,
+  BitcoinNetworkType,
   RpcErrorCode,
 } from "sats-connect";
+
+import {
+  paymentConfig,
+} from "../payment/paymentConfig";
 
 export interface ConnectedWalletAddress {
   address: string;
@@ -80,6 +85,45 @@ function isMissingProviderError(
     .includes("wallet provider");
 }
 
+function getConfiguredWalletNetwork() {
+  return paymentConfig.network ===
+    "signet"
+    ? BitcoinNetworkType.Signet
+    : BitcoinNetworkType.Mainnet;
+}
+
+function isAddressCompatibleWithNetwork(
+  address: string,
+) {
+  const normalizedAddress =
+    address
+      .trim()
+      .toLowerCase();
+
+  if (
+    paymentConfig.network ===
+    "signet"
+  ) {
+    return (
+      normalizedAddress.startsWith(
+        "tb1",
+      ) ||
+      /^[mn2]/.test(
+        normalizedAddress,
+      )
+    );
+  }
+
+  return (
+    normalizedAddress.startsWith(
+      "bc1",
+    ) ||
+    /^[13]/.test(
+      normalizedAddress,
+    )
+  );
+}
+
 function setConnectedAddresses(
   addresses:
     readonly WalletAddressResponse[],
@@ -100,7 +144,13 @@ function setConnectedAddresses(
 
   if (
     !paymentAddress ||
-    !ordinalsAddress
+    !ordinalsAddress ||
+    !isAddressCompatibleWithNetwork(
+      paymentAddress.address,
+    ) ||
+    !isAddressCompatibleWithNetwork(
+      ordinalsAddress.address,
+    )
   ) {
     return false;
   }
@@ -235,6 +285,9 @@ export async function connectWallet() {
 
         message:
           "Connect your Bitcoin wallet to StillPoor.",
+
+        network:
+          getConfiguredWalletNetwork(),
       },
     );
 
@@ -267,7 +320,7 @@ export async function connectWallet() {
         ...disconnectedWalletState,
 
         errorMessage:
-          "Xverse did not return the required Bitcoin addresses.",
+          `Xverse did not return the required ${paymentConfig.networkLabel} Bitcoin addresses.`,
       });
 
       return false;
