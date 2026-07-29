@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -10,8 +11,12 @@ import {
 } from "../lib/board/boardConfig";
 
 import {
-  getBlock,
+  setBlock,
 } from "../lib/board/boardStore";
+
+import {
+  useBoardBlocks,
+} from "../lib/board/useBoardBlocks";
 
 import {
   cancelClaim,
@@ -24,6 +29,10 @@ import {
 import {
   startEditorForExistingBlock,
 } from "../lib/editor/editorState";
+
+import {
+  mintBlockOrdinalSimulated,
+} from "../lib/ordinals/ordinalApi";
 
 import {
   reserveClaimOrder,
@@ -101,6 +110,15 @@ function formatDate(
   );
 }
 
+function formatInscriptionId(
+  inscriptionId: string,
+) {
+  return `${inscriptionId.slice(
+    0,
+    10,
+  )}…${inscriptionId.slice(-8)}`;
+}
+
 export default function BlockInspector({
   block,
 }: BlockInspectorProps) {
@@ -109,6 +127,9 @@ export default function BlockInspector({
 
   const walletState =
     useWalletState();
+
+  const boardBlocks =
+    useBoardBlocks();
 
   const [
     isReserving,
@@ -129,12 +150,46 @@ export default function BlockInspector({
     null,
   );
 
+  const [
+    isMinting,
+    setIsMinting,
+  ] = useState(false);
+
+  const [
+    mintError,
+    setMintError,
+  ] = useState<string | null>(
+    null,
+  );
+
   const currentWalletAddress =
     walletState.paymentAddress
       ?.address ?? null;
 
   const occupiedBlock =
-    getBlock(block);
+    useMemo(
+      () =>
+        boardBlocks.find(
+          (candidateBlock) =>
+            candidateBlock.coordinate
+              .row === block.row &&
+            candidateBlock.coordinate
+              .column ===
+              block.column,
+        ) ?? null,
+      [
+        block.column,
+        block.row,
+        boardBlocks,
+      ],
+    );
+
+  useEffect(() => {
+    setMintError(null);
+  }, [
+    block.column,
+    block.row,
+  ]);
 
   useEffect(() => {
     let isActive = true;
@@ -321,7 +376,12 @@ export default function BlockInspector({
     () => {
       if (
         !occupiedBlock ||
-        !isOwnedByCurrentUser
+        !isOwnedByCurrentUser ||
+        occupiedBlock
+          .inscriptionPending ||
+        occupiedBlock
+          .latestInscriptionVersion >
+          0
       ) {
         return;
       }
@@ -331,7 +391,59 @@ export default function BlockInspector({
       );
     };
 
+  const handleMintOrdinal =
+    async () => {
+      if (
+        !occupiedBlock ||
+        !isOwnedByCurrentUser ||
+        occupiedBlock
+          .inscriptionPending ||
+        occupiedBlock
+          .latestInscriptionVersion >
+          0 ||
+        isMinting
+      ) {
+        return;
+      }
+
+      setMintError(null);
+      setIsMinting(true);
+
+      try {
+        const result =
+          await mintBlockOrdinalSimulated(
+            block,
+          );
+
+        setBlock({
+          ...result.block,
+
+          coordinate: {
+            ...result.block
+              .coordinate,
+          },
+
+          pixels: [
+            ...result.block.pixels,
+          ],
+        });
+      } catch (error) {
+        setMintError(
+          error instanceof Error
+            ? error.message
+            : "Unable to mint the Ordinal.",
+        );
+      } finally {
+        setIsMinting(false);
+      }
+    };
+
   if (occupiedBlock) {
+    const hasConfirmedInscription =
+      occupiedBlock
+        .latestInscriptionVersion >
+      0;
+
     return (
       <aside className="pointer-events-auto absolute bottom-8 left-1/2 w-80 -translate-x-1/2 rounded-xl bg-white p-4 shadow-lg">
         <p className="text-sm font-semibold">
@@ -415,18 +527,112 @@ export default function BlockInspector({
               }
             </dd>
           </div>
+
+          {occupiedBlock
+            .inscriptionPending && (
+            <div>
+              <dt className="text-gray-500">
+                Ordinal
+              </dt>
+
+              <dd className="mt-1 font-medium">
+                Inscription pending
+              </dd>
+            </div>
+          )}
+
+          {hasConfirmedInscription && (
+            <div>
+              <dt className="text-gray-500">
+                Ordinal
+              </dt>
+
+              <dd className="mt-1">
+                <span className="block font-medium">
+                  Version{" "}
+                  {
+                    occupiedBlock
+                      .latestInscriptionVersion
+                  }
+                </span>
+
+                {occupiedBlock
+                  .latestInscriptionId && (
+                  <span
+                    title={
+                      occupiedBlock
+                        .latestInscriptionId
+                    }
+                    className="mt-0.5 block font-mono text-xs text-gray-500"
+                  >
+                    {formatInscriptionId(
+                      occupiedBlock
+                        .latestInscriptionId,
+                    )}
+                  </span>
+                )}
+
+                {occupiedBlock
+                  .latestInscribedAt && (
+                  <span className="mt-0.5 block text-xs text-gray-500">
+                    Inscribed{" "}
+                    {formatDate(
+                      occupiedBlock
+                        .latestInscribedAt,
+                    )}
+                  </span>
+                )}
+              </dd>
+            </div>
+          )}
         </dl>
 
-        {isOwnedByCurrentUser && (
-          <button
-            type="button"
-            onClick={
-              handleEditBlock
-            }
-            className="mt-5 w-full rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white"
+        {isOwnedByCurrentUser &&
+          !occupiedBlock
+            .inscriptionPending &&
+          !hasConfirmedInscription && (
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={
+                  handleEditBlock
+                }
+                disabled={isMinting}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium disabled:opacity-40"
+              >
+                Edit Block
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  handleMintOrdinal
+                }
+                disabled={isMinting}
+                className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isMinting
+                  ? "Minting..."
+                  : "Mint Ordinal"}
+              </button>
+            </div>
+          )}
+
+        {isOwnedByCurrentUser &&
+          hasConfirmedInscription && (
+            <p className="mt-5 rounded-lg bg-black/5 px-3 py-2 text-xs leading-5 text-black/55">
+              Further edits require a new
+              Ordinal version.
+            </p>
+          )}
+
+        {mintError && (
+          <p
+            role="alert"
+            className="mt-3 text-sm text-red-600"
           >
-            Edit Block
-          </button>
+            {mintError}
+          </p>
         )}
       </aside>
     );
