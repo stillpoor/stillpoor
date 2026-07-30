@@ -1,3 +1,7 @@
+import type {
+  BlockCoordinate,
+} from "../board/boardTypes";
+
 export type ClaimPaymentSessionStage =
   | "reserved"
   | "payment-started"
@@ -5,7 +9,15 @@ export type ClaimPaymentSessionStage =
 
 export interface StoredClaimPaymentSession {
   orderId: string;
+  expiresAt: string;
+
   paymentAddress: string;
+  receiverAddress: string;
+
+  blocks:
+    BlockCoordinate[];
+
+  totalPriceSats: number;
 
   stage:
     ClaimPaymentSessionStage;
@@ -16,6 +28,9 @@ export interface StoredClaimPaymentSession {
 
 const storageKey =
   "stillpoor:claim-payment-session";
+
+const transactionIdPattern =
+  /^[0-9a-fA-F]{64}$/;
 
 function canUseSessionStorage() {
   return (
@@ -43,6 +58,65 @@ function isValidStage(
       "payment-started" ||
     value ===
       "transaction-known"
+  );
+}
+
+function isValidBlockCoordinate(
+  value: unknown,
+): value is BlockCoordinate {
+  if (
+    !value ||
+    typeof value !==
+      "object"
+  ) {
+    return false;
+  }
+
+  const coordinate =
+    value as
+      Partial<BlockCoordinate>;
+
+  return (
+    typeof coordinate.row ===
+      "number" &&
+    Number.isInteger(
+      coordinate.row,
+    ) &&
+    coordinate.row >= 0 &&
+
+    typeof coordinate.column ===
+      "number" &&
+    Number.isInteger(
+      coordinate.column,
+    ) &&
+    coordinate.column >= 0
+  );
+}
+
+function isValidPositiveSafeInteger(
+  value: unknown,
+): value is number {
+  return (
+    typeof value ===
+      "number" &&
+    Number.isSafeInteger(
+      value,
+    ) &&
+    value > 0
+  );
+}
+
+function isValidExpiryDate(
+  value: unknown,
+): value is string {
+  return (
+    typeof value ===
+      "string" &&
+    Number.isFinite(
+      new Date(
+        value,
+      ).getTime(),
+    )
   );
 }
 
@@ -97,41 +171,100 @@ function readStoredSession() {
     parsedValue as
       Partial<StoredClaimPaymentSession>;
 
+  const hasValidBlocks =
+    Array.isArray(
+      session.blocks,
+    ) &&
+    session.blocks.length > 0 &&
+    session.blocks.every(
+      isValidBlockCoordinate,
+    );
+
+  const hasValidTransactionId =
+    session.paymentTxid ===
+      null ||
+    (
+      typeof session.paymentTxid ===
+        "string" &&
+      transactionIdPattern.test(
+        session.paymentTxid,
+      )
+    );
+
+  const hasConsistentPaymentStage =
+    session.stage ===
+      "transaction-known"
+      ? (
+          typeof session.paymentTxid ===
+            "string" &&
+          transactionIdPattern.test(
+            session.paymentTxid,
+          )
+        )
+      : session.paymentTxid ===
+          null;
+
   if (
     !isNonEmptyString(
       session.orderId,
     ) ||
+    !isValidExpiryDate(
+      session.expiresAt,
+    ) ||
     !isNonEmptyString(
       session.paymentAddress,
+    ) ||
+    !isNonEmptyString(
+      session.receiverAddress,
+    ) ||
+    !hasValidBlocks ||
+    !isValidPositiveSafeInteger(
+      session.totalPriceSats,
     ) ||
     !isValidStage(
       session.stage,
     ) ||
-    (
-      session.paymentTxid !==
-        null &&
-      typeof session.paymentTxid !==
-        "string"
-    )
+    !hasValidTransactionId ||
+    !hasConsistentPaymentStage
   ) {
     clearStoredClaimPaymentSession();
 
     return null;
   }
 
+  const validSession =
+    session as
+      StoredClaimPaymentSession;
+
   return {
     orderId:
-      session.orderId.trim(),
+      validSession.orderId.trim(),
+
+    expiresAt:
+      validSession.expiresAt,
 
     paymentAddress:
-      session.paymentAddress.trim(),
+      validSession.paymentAddress.trim(),
+
+    receiverAddress:
+      validSession.receiverAddress.trim(),
+
+    blocks:
+      validSession.blocks.map(
+        (block) => ({
+          ...block,
+        }),
+      ),
+
+    totalPriceSats:
+      validSession.totalPriceSats,
 
     stage:
-      session.stage,
+      validSession.stage,
 
     paymentTxid:
-      session.paymentTxid
-        ? session.paymentTxid
+      validSession.paymentTxid
+        ? validSession.paymentTxid
             .trim()
             .toLowerCase()
         : null,
@@ -159,8 +292,8 @@ function writeStoredSession(
     /*
      * The payment flow must keep working
      * even when browser storage is blocked.
-     * In that case, the server expiration
-     * remains the fallback protection.
+     * Server-side expiration remains the
+     * fallback protection.
      */
   }
 }
@@ -171,17 +304,43 @@ export function getStoredClaimPaymentSession() {
 
 export function storeReservedClaimPaymentSession({
   orderId,
+  expiresAt,
   paymentAddress,
+  receiverAddress,
+  blocks,
+  totalPriceSats,
 }: {
   orderId: string;
+  expiresAt: string;
+
   paymentAddress: string;
+  receiverAddress: string;
+
+  blocks:
+    readonly BlockCoordinate[];
+
+  totalPriceSats: number;
 }) {
   writeStoredSession({
     orderId:
       orderId.trim(),
 
+    expiresAt,
+
     paymentAddress:
       paymentAddress.trim(),
+
+    receiverAddress:
+      receiverAddress.trim(),
+
+    blocks:
+      blocks.map(
+        (block) => ({
+          ...block,
+        }),
+      ),
+
+    totalPriceSats,
 
     stage:
       "reserved",
@@ -210,6 +369,9 @@ export function markClaimPaymentStarted(
 
     stage:
       "payment-started",
+
+    paymentTxid:
+      null,
   });
 }
 
@@ -226,7 +388,10 @@ export function storeClaimPaymentTransaction({
   if (
     !session ||
     session.orderId !==
-      orderId
+      orderId ||
+    !transactionIdPattern.test(
+      paymentTxid,
+    )
   ) {
     return;
   }

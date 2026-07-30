@@ -2,6 +2,16 @@ import type {
   BlockCoordinate,
 } from "../board/boardTypes";
 
+import type {
+  ClaimPaymentSessionStage,
+} from "./paymentReservationSession";
+
+export type PaymentRecoveryStage =
+  Exclude<
+    ClaimPaymentSessionStage,
+    "reserved"
+  >;
+
 export interface PaymentState {
   isOpen: boolean;
 
@@ -19,6 +29,12 @@ export interface PaymentState {
 
   totalPriceSats:
     number;
+
+  paymentTxid:
+    string | null;
+
+  recoveryStage:
+    PaymentRecoveryStage | null;
 }
 
 type PaymentListener =
@@ -36,6 +52,9 @@ const closedPaymentState:
 
     blocks: [],
     totalPriceSats: 0,
+
+    paymentTxid: null,
+    recoveryStage: null,
   };
 
 let paymentState:
@@ -64,6 +83,8 @@ export function openPaymentModal({
   receiverAddress,
   blocks,
   totalPriceSats,
+  paymentTxid = null,
+  recoveryStage = null,
 }: {
   orderId: string;
   expiresAt: string;
@@ -75,6 +96,11 @@ export function openPaymentModal({
     readonly BlockCoordinate[];
 
   totalPriceSats: number;
+
+  paymentTxid?: string | null;
+
+  recoveryStage?:
+    PaymentRecoveryStage | null;
 }) {
   paymentState = {
     isOpen: true,
@@ -93,6 +119,9 @@ export function openPaymentModal({
       ),
 
     totalPriceSats,
+
+    paymentTxid,
+    recoveryStage,
   };
 
   notifyListeners();

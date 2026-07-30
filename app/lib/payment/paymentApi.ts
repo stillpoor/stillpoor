@@ -173,8 +173,21 @@ export async function reserveClaimOrder(
     orderId:
       reservation.orderId,
 
+    expiresAt:
+      reservation.expiresAt,
+
     paymentAddress:
       options.paymentAddress,
+
+    receiverAddress:
+      reservation
+        .receiverAddress,
+
+    blocks:
+      options.blocks,
+
+    totalPriceSats:
+      reservation.amountSats,
   });
 
   refreshBoardStats();

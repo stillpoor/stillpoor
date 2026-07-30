@@ -29,6 +29,8 @@ interface ClaimOrderRow {
   payment_address: string;
   ordinals_address: string;
 
+  block_numbers: number[];
+
   amount_sats:
     number | string;
 
@@ -38,6 +40,9 @@ interface ClaimOrderRow {
   expires_at: string;
 
   payment_network: string;
+
+  payment_txid:
+    string | null;
 }
 
 interface MempoolInput {
@@ -78,7 +83,35 @@ interface ClaimedBlockRow {
 
   claim_transaction_id:
     string;
+
+  status?: string;
+
+  latest_inscription_version?:
+    number;
+
+  latest_inscription_id?:
+    string | null;
+
+  latest_inscribed_at?:
+    string | null;
+
+  inscription_pending?:
+    boolean;
 }
+
+type PaidOrderRecoveryResult =
+  | {
+      kind: "success";
+      rows: ClaimedBlockRow[];
+    }
+  | {
+      kind: "not-paid";
+    }
+  | {
+      kind: "error";
+      response:
+        NextResponse;
+    };
 
 function isNonEmptyString(
   value: unknown,
@@ -103,6 +136,26 @@ function isValidTransactionId(
 ) {
   return /^[0-9a-fA-F]{64}$/.test(
     value,
+  );
+}
+
+function isValidBlockNumbers(
+  value: unknown,
+): value is number[] {
+  return (
+    Array.isArray(
+      value,
+    ) &&
+    value.length > 0 &&
+    value.every(
+      (blockNumber) =>
+        typeof blockNumber ===
+          "number" &&
+        Number.isInteger(
+          blockNumber,
+        ) &&
+        blockNumber > 0,
+    )
   );
 }
 
@@ -229,18 +282,353 @@ function mapClaimedBlocks(
         row.claim_transaction_id,
 
       latestInscriptionVersion:
-        0,
+        Number.isInteger(
+          row.latest_inscription_version,
+        )
+          ? row.latest_inscription_version ??
+            0
+          : 0,
 
       latestInscriptionId:
+        row.latest_inscription_id ??
         null,
 
       latestInscribedAt:
+        row.latest_inscribed_at ??
         null,
 
       inscriptionPending:
-        false,
+        typeof row.inscription_pending ===
+          "boolean"
+          ? row.inscription_pending
+          : false,
     }),
   );
+}
+
+function areValidClaimedBlocks({
+  rows,
+  expectedBlockNumbers,
+  paymentAddress,
+  paymentTxid,
+}: {
+  rows:
+    ClaimedBlockRow[];
+
+  expectedBlockNumbers:
+    readonly number[];
+
+  paymentAddress: string;
+  paymentTxid: string;
+}) {
+  const expectedPixelCount =
+    PIXELS_PER_BLOCK *
+    PIXELS_PER_BLOCK;
+
+  const uniqueExpectedBlockNumbers =
+    new Set(
+      expectedBlockNumbers,
+    );
+
+  if (
+    uniqueExpectedBlockNumbers.size !==
+      expectedBlockNumbers.length ||
+    rows.length !==
+      expectedBlockNumbers.length
+  ) {
+    return false;
+  }
+
+  return rows.every(
+    (row) =>
+      uniqueExpectedBlockNumbers.has(
+        row.block_number,
+      ) &&
+      row
+        .owner_payment_address ===
+        paymentAddress &&
+      (
+        row.status ===
+          undefined ||
+        row.status ===
+          "claimed"
+      ) &&
+      Boolean(
+        row.claimed_at,
+      ) &&
+      Boolean(
+        row.updated_at,
+      ) &&
+      row
+        .claim_transaction_id
+        .toLowerCase() ===
+        paymentTxid &&
+      Array.isArray(
+        row.pixels,
+      ) &&
+      row.pixels.length ===
+        expectedPixelCount,
+  );
+}
+
+function createSuccessResponse(
+  rows:
+    ClaimedBlockRow[],
+) {
+  return NextResponse.json(
+    {
+      ok: true,
+
+      claimedBlocks:
+        mapClaimedBlocks(
+          rows,
+        ),
+    },
+    {
+      headers: {
+        "Cache-Control":
+          "no-store",
+      },
+    },
+  );
+}
+
+async function recoverPaidClaimOrder({
+  orderId,
+  paymentAddress,
+  paymentTxid,
+}: {
+  orderId: string;
+  paymentAddress: string;
+  paymentTxid: string;
+}): Promise<
+  PaidOrderRecoveryResult
+> {
+  const {
+    data: paidOrderData,
+    error: paidOrderError,
+  } = await supabaseAdmin
+    .from("claim_orders")
+    .select(`
+      id,
+      payment_address,
+      block_numbers,
+      status,
+      payment_txid
+    `)
+    .eq(
+      "id",
+      orderId,
+    )
+    .maybeSingle();
+
+  if (
+    paidOrderError ||
+    !paidOrderData
+  ) {
+    return {
+      kind: "error",
+
+      response:
+        NextResponse.json(
+          {
+            ok: false,
+
+            error:
+              "The confirmed Claim order could not be recovered.",
+          },
+          {
+            status: 500,
+          },
+        ),
+    };
+  }
+
+  const paidOrder =
+    paidOrderData as {
+      id: string;
+
+      payment_address:
+        string;
+
+      block_numbers:
+        number[];
+
+      status: string;
+
+      payment_txid:
+        string | null;
+    };
+
+  if (
+    paidOrder.payment_address !==
+    paymentAddress
+  ) {
+    return {
+      kind: "error",
+
+      response:
+        NextResponse.json(
+          {
+            ok: false,
+
+            error:
+              "The wallet does not own this order.",
+          },
+          {
+            status: 403,
+          },
+        ),
+    };
+  }
+
+  if (
+    paidOrder.status !==
+    "paid"
+  ) {
+    return {
+      kind: "not-paid",
+    };
+  }
+
+  if (
+    !paidOrder.payment_txid ||
+    paidOrder.payment_txid
+      .toLowerCase() !==
+      paymentTxid
+  ) {
+    return {
+      kind: "error",
+
+      response:
+        NextResponse.json(
+          {
+            ok: false,
+
+            error:
+              "The Claim order was confirmed with a different Bitcoin transaction.",
+          },
+          {
+            status: 409,
+          },
+        ),
+    };
+  }
+
+  if (
+    !isValidBlockNumbers(
+      paidOrder.block_numbers,
+    )
+  ) {
+    return {
+      kind: "error",
+
+      response:
+        NextResponse.json(
+          {
+            ok: false,
+
+            error:
+              "The confirmed Claim order contains invalid Block data.",
+          },
+          {
+            status: 500,
+          },
+        ),
+    };
+  }
+
+  const {
+    data: claimedBlockData,
+    error: claimedBlockError,
+  } = await supabaseAdmin
+    .from("blocks")
+    .select(`
+      block_number,
+      block_row,
+      block_column,
+      owner_payment_address,
+      pixels,
+      description,
+      claimed_at,
+      updated_at,
+      claim_transaction_id,
+      status,
+      latest_inscription_version,
+      latest_inscription_id,
+      latest_inscribed_at,
+      inscription_pending
+    `)
+    .in(
+      "block_number",
+      paidOrder.block_numbers,
+    )
+    .order(
+      "block_number",
+      {
+        ascending: true,
+      },
+    );
+
+  if (
+    claimedBlockError
+  ) {
+    return {
+      kind: "error",
+
+      response:
+        NextResponse.json(
+          {
+            ok: false,
+
+            error:
+              "The confirmed Blocks could not be recovered.",
+          },
+          {
+            status: 500,
+          },
+        ),
+    };
+  }
+
+  const rows =
+    (claimedBlockData ??
+      []) as ClaimedBlockRow[];
+
+  if (
+    !areValidClaimedBlocks({
+      rows,
+
+      expectedBlockNumbers:
+        paidOrder.block_numbers,
+
+      paymentAddress,
+
+      paymentTxid,
+    })
+  ) {
+    return {
+      kind: "error",
+
+      response:
+        NextResponse.json(
+          {
+            ok: false,
+
+            error:
+              "The recovered Blocks contain invalid data.",
+          },
+          {
+            status: 500,
+          },
+        ),
+    };
+  }
+
+  return {
+    kind: "success",
+    rows,
+  };
 }
 
 export const runtime =
@@ -349,11 +737,13 @@ export async function POST(
       id,
       payment_address,
       ordinals_address,
+      block_numbers,
       amount_sats,
       receiver_address,
       status,
       expires_at,
-      payment_network
+      payment_network,
+      payment_txid
     `)
     .eq(
       "id",
@@ -399,23 +789,6 @@ export async function POST(
   }
 
   if (
-    order.status !==
-    "pending"
-  ) {
-    return NextResponse.json(
-      {
-        ok: false,
-
-        error:
-          "The Claim order is no longer pending.",
-      },
-      {
-        status: 409,
-      },
-    );
-  }
-
-  if (
     order.payment_network !==
     paymentConfig.network
   ) {
@@ -428,6 +801,92 @@ export async function POST(
       },
       {
         status: 400,
+      },
+    );
+  }
+
+  if (
+    order.receiver_address !==
+    paymentConfig.receiverAddress
+  ) {
+    return NextResponse.json(
+      {
+        ok: false,
+
+        error:
+          "The Claim order receiver is invalid.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+
+  /*
+   * Idempotent recovery:
+   *
+   * The transaction may already have been
+   * verified immediately before a refresh.
+   * Reusing the same order and txid must return
+   * the already claimed Blocks instead of
+   * reporting a second-confirmation error.
+   */
+  if (
+    order.status ===
+    "paid"
+  ) {
+    const recovery =
+      await recoverPaidClaimOrder({
+        orderId,
+
+        paymentAddress:
+          session.paymentAddress,
+
+        paymentTxid,
+      });
+
+    if (
+      recovery.kind ===
+      "success"
+    ) {
+      return createSuccessResponse(
+        recovery.rows,
+      );
+    }
+
+    if (
+      recovery.kind ===
+      "error"
+    ) {
+      return recovery.response;
+    }
+
+    return NextResponse.json(
+      {
+        ok: false,
+
+        error:
+          "The paid Claim order could not be recovered.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+
+  if (
+    order.status !==
+    "pending"
+  ) {
+    return NextResponse.json(
+      {
+        ok: false,
+
+        error:
+          "The Claim order is no longer pending.",
+      },
+      {
+        status: 409,
       },
     );
   }
@@ -450,6 +909,24 @@ export async function POST(
     );
   }
 
+  if (
+    !isValidBlockNumbers(
+      order.block_numbers,
+    )
+  ) {
+    return NextResponse.json(
+      {
+        ok: false,
+
+        error:
+          "The Claim order contains invalid Block data.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+
   const expectedAmountSats =
     readPositiveSafeInteger(
       order.amount_sats,
@@ -465,23 +942,6 @@ export async function POST(
 
         error:
           "The Claim order amount is invalid.",
-      },
-      {
-        status: 500,
-      },
-    );
-  }
-
-  if (
-    order.receiver_address !==
-    paymentConfig.receiverAddress
-  ) {
-    return NextResponse.json(
-      {
-        ok: false,
-
-        error:
-          "The Claim order receiver is invalid.",
       },
       {
         status: 500,
@@ -679,6 +1139,43 @@ export async function POST(
     const lowerError =
       errorMessage.toLowerCase();
 
+    /*
+     * Handles a rare race where another request
+     * confirmed the order after this request had
+     * already read it as pending.
+     */
+    if (
+      lowerError.includes(
+        "no longer pending",
+      )
+    ) {
+      const recovery =
+        await recoverPaidClaimOrder({
+          orderId,
+
+          paymentAddress:
+            session.paymentAddress,
+
+          paymentTxid,
+        });
+
+      if (
+        recovery.kind ===
+        "success"
+      ) {
+        return createSuccessResponse(
+          recovery.rows,
+        );
+      }
+
+      if (
+        recovery.kind ===
+        "error"
+      ) {
+        return recovery.response;
+      }
+    }
+
     let status = 400;
 
     if (
@@ -720,31 +1217,18 @@ export async function POST(
     (data ?? []) as
       ClaimedBlockRow[];
 
-  const expectedPixelCount =
-    PIXELS_PER_BLOCK *
-    PIXELS_PER_BLOCK;
-
-  const hasInvalidBlock =
-    rows.some(
-      (row) =>
-        row
-          .owner_payment_address !==
-          session.paymentAddress ||
-        !row.claimed_at ||
-        !row.updated_at ||
-        row
-          .claim_transaction_id !==
-          paymentTxid ||
-        !Array.isArray(
-          row.pixels,
-        ) ||
-        row.pixels.length !==
-          expectedPixelCount,
-    );
-
   if (
-    rows.length === 0 ||
-    hasInvalidBlock
+    !areValidClaimedBlocks({
+      rows,
+
+      expectedBlockNumbers:
+        order.block_numbers,
+
+      paymentAddress:
+        session.paymentAddress,
+
+      paymentTxid,
+    })
   ) {
     return NextResponse.json(
       {
@@ -759,20 +1243,7 @@ export async function POST(
     );
   }
 
-  return NextResponse.json(
-    {
-      ok: true,
-
-      claimedBlocks:
-        mapClaimedBlocks(
-          rows,
-        ),
-    },
-    {
-      headers: {
-        "Cache-Control":
-          "no-store",
-      },
-    },
+  return createSuccessResponse(
+    rows,
   );
 }

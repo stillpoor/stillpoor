@@ -25,12 +25,15 @@ import {
 } from "../lib/payment/paymentConfig";
 
 import {
+  getStoredClaimPaymentSession,
   markClaimPaymentStarted,
   storeClaimPaymentTransaction,
 } from "../lib/payment/paymentReservationSession";
 
 import {
   closePaymentModal,
+  getPaymentState,
+  openPaymentModal,
 } from "../lib/payment/paymentState";
 
 import {
@@ -143,19 +146,74 @@ export default function PaymentModal() {
   ] = useState(false);
 
   /*
-   * A reservation that was created but never
-   * reached Xverse is safe to release after a
-   * refresh. Reservations whose payment started
-   * are deliberately kept.
+   * Recover a payment flow after a refresh.
+   *
+   * - A reservation that never reached Xverse
+   *   is released automatically.
+   * - A known transaction reopens the modal and
+   *   can be verified.
+   * - An uncertain Xverse result reopens a safe
+   *   recovery state without sending again.
    */
   useEffect(() => {
-    void releaseAbandonedUnpaidClaimReservation()
-      .catch((error) => {
-        console.warn(
-          "Unable to release the abandoned unpaid Claim reservation:",
-          error,
-        );
-      });
+    if (
+      getPaymentState()
+        .isOpen
+    ) {
+      return;
+    }
+
+    const storedSession =
+      getStoredClaimPaymentSession();
+
+    if (!storedSession) {
+      return;
+    }
+
+    if (
+      storedSession.stage ===
+        "reserved"
+    ) {
+      void releaseAbandonedUnpaidClaimReservation()
+        .catch((error) => {
+          console.warn(
+            "Unable to release the abandoned unpaid Claim reservation:",
+            error,
+          );
+        });
+
+      return;
+    }
+
+    openPaymentModal({
+      orderId:
+        storedSession.orderId,
+
+      expiresAt:
+        storedSession.expiresAt,
+
+      paymentAddress:
+        storedSession
+          .paymentAddress,
+
+      receiverAddress:
+        storedSession
+          .receiverAddress,
+
+      blocks:
+        storedSession.blocks,
+
+      totalPriceSats:
+        storedSession
+          .totalPriceSats,
+
+      paymentTxid:
+        storedSession
+          .paymentTxid,
+
+      recoveryStage:
+        storedSession.stage,
+    });
   }, []);
 
   useEffect(() => {
@@ -166,7 +224,11 @@ export default function PaymentModal() {
     }
 
     setErrorMessage(null);
-    setPaymentTxid(null);
+
+    setPaymentTxid(
+      paymentState
+        .paymentTxid,
+    );
 
     setVerifiedClaimedBlocks(
       null,
@@ -182,11 +244,17 @@ export default function PaymentModal() {
     );
 
     setIsPaymentStatusUncertain(
-      false,
+      paymentState
+        .recoveryStage ===
+        "payment-started" &&
+      !paymentState
+        .paymentTxid,
     );
   }, [
     paymentState.isOpen,
     paymentState.orderId,
+    paymentState.paymentTxid,
+    paymentState.recoveryStage,
   ]);
 
   if (
@@ -201,6 +269,19 @@ export default function PaymentModal() {
   const isPaymentConfirmed =
     Boolean(
       verifiedClaimedBlocks,
+    );
+
+  const isRecoveredPayment =
+    paymentState
+      .recoveryStage !==
+      null;
+
+  const hasRecoveredTransaction =
+    paymentState
+      .recoveryStage ===
+      "transaction-known" &&
+    Boolean(
+      paymentTxid,
     );
 
   const paymentTransactionUrl =
@@ -536,6 +617,21 @@ export default function PaymentModal() {
                 : "Your Blocks are officially yours. You can now leave your mark on the Board."}
             </p>
           </>
+        ) : isRecoveredPayment ? (
+          <>
+            <h2
+              id="payment-modal-title"
+              className="text-lg font-semibold"
+            >
+              Resume payment
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-gray-500">
+              {hasRecoveredTransaction
+                ? "Your Bitcoin transaction was recovered after the page refreshed."
+                : "Your reservation is still protected after the page refreshed."}
+            </p>
+          </>
         ) : (
           <>
             <h2
@@ -666,10 +762,12 @@ export default function PaymentModal() {
             {isReservationReleased
               ? "No payment was sent. Your Block selection remains active and can be reserved again."
               : isPaymentStatusUncertain
-                ? "The reservation remains active to prevent the Block from being sold twice."
-                : paymentTxid
-                  ? `The ${paymentConfig.networkLabel} transaction was sent. StillPoor is now verifying it.`
-                  : `Xverse will display the ${paymentConfig.networkLabel} recipient, payment amount and network fee before sending.`}
+                ? "Xverse was opened before the page refreshed, but StillPoor did not receive a transaction ID. The reservation remains active to prevent the Block from being sold twice."
+                : hasRecoveredTransaction
+                  ? "Your transaction is ready to be verified. No new payment will be sent."
+                  : paymentTxid
+                    ? `The ${paymentConfig.networkLabel} transaction was sent. StillPoor is now verifying it.`
+                    : `Xverse will display the ${paymentConfig.networkLabel} recipient, payment amount and network fee before sending.`}
           </div>
         )}
 
@@ -697,8 +795,7 @@ export default function PaymentModal() {
               ? "Opening Editor..."
               : "Start creating"}
           </button>
-        ) : isReservationReleased ||
-          isPaymentStatusUncertain ? (
+        ) : isReservationReleased ? (
           <button
             type="button"
             onClick={
@@ -710,6 +807,19 @@ export default function PaymentModal() {
             className="mt-6 w-full rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             Back to selection
+          </button>
+        ) : isPaymentStatusUncertain ? (
+          <button
+            type="button"
+            onClick={
+              closePaymentModal
+            }
+            disabled={
+              isProcessing
+            }
+            className="mt-6 w-full rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Back to Board
           </button>
         ) : (
           <div className="mt-6 flex gap-2">

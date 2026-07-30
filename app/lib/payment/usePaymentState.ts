@@ -13,17 +13,22 @@ import type {
   PaymentState,
 } from "./paymentState";
 
-const serverPaymentState: PaymentState = {
-  isOpen: false,
+const serverPaymentState:
+  PaymentState = {
+    isOpen: false,
 
-  orderId: null,
-  expiresAt: null,
-  paymentAddress: null,
-  receiverAddress: null,
+    orderId: null,
+    expiresAt: null,
 
-  blocks: [],
-  totalPriceSats: 0,
-};
+    paymentAddress: null,
+    receiverAddress: null,
+
+    blocks: [],
+    totalPriceSats: 0,
+
+    paymentTxid: null,
+    recoveryStage: null,
+  };
 
 function getServerPaymentState() {
   return serverPaymentState;
